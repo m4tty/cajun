@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"strings"
 	"time"
@@ -26,6 +27,7 @@ type lexer struct {
 	pos        int
 	width      int
 	items      chan item
+	delimiters map[string]*Delimiter
 }
 
 type item struct {
@@ -34,16 +36,22 @@ type item struct {
 	val string   // The value of this item.
 }
 
-func main() {
+// TODO: modify lex interface to be lex(name, input, options...) options will be a few self referential functions. e.g.
+//  addDelimiter(type, left,right), which might be enough for the lexer.
 
+// the facade around the lexer, which is a parser for creole wiki, would use reasonable defaults for creole, but would support extension via:
+//  useExtension(name, left,right, function replaceTokens(input string) output string)
+func main() {
+	var buffer bytes.Buffer
 	fmt.Println("hello")
-	l := lex("test", "blah adfasdf lba **hasdf** alb asdfh **ab**lasdf\n blah asdfasdf **asdf**")
+	l := lex("test", "blah adfasdf lba **hasdf** alb asdfh [ab]lasdf\n blah asdfasdf **asdf**")
 	fmt.Println(l)
 	for {
 
 		i := l.nextItem()
 		fmt.Println("GOT ONE ----v")
 		fmt.Println(i.val)
+		buffer.WriteString(i.val)
 		fmt.Println("GOT ONE ----^")
 		if l.state == nil {
 			break
@@ -51,7 +59,7 @@ func main() {
 		//		fmt.Println(item)
 	}
 	fmt.Println("done")
-
+	fmt.Println(buffer.String())
 	time.Sleep(5 * time.Second)
 	fmt.Println("You're boring; I'm leaving.")
 
@@ -65,12 +73,29 @@ func lex(name, input string) *lexer {
 		rightDelim: "**",
 		leftDelim:  "**",
 		items:      make(chan item, 2),
+		delimiters: make(map[string]*Delimiter),
 	}
 	//go l.run()
 	return l
 
 }
 
+type Delimiter struct {
+	name  string
+	left  string
+	right string
+}
+
+func (l *lexer) addDelimiter(name string, left string, right string) {
+	delim, ok := l.delimiters[name]
+	if !ok {
+		fmt.Println("A delimiter of that name already exists", delim)
+		return
+	}
+	//	var delimiter = Delimiter{left: left, right: right}
+	l.delimiters[name] = &Delimiter{left: left, right: right}
+
+}
 func (l *lexer) nextItem() item {
 	for {
 		select {
@@ -95,7 +120,7 @@ func (l *lexer) nextItem() item {
 func lexText(l *lexer) stateFn {
 	for {
 		fmt.Println(l.input[l.pos:])
-		if strings.HasPrefix(l.input[l.pos:], leftMeta) {
+		if strings.HasPrefix(l.input[l.pos:], l.leftDelim) {
 			fmt.Println("leftMeta hit")
 			if l.pos > l.start {
 				fmt.Println("l.pos > l.start", l.pos, l.start)
