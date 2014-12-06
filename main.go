@@ -61,6 +61,7 @@ const (
 	itemParagraphStart
 	itemParagraphEnd
 	itemTable
+	itemText
 	itemSingleNewLine
 	itemDoubleNewLine // this is also a blank line. maybe rename itemBlankLine, as this essentially means we have a paragraph above.
 	itemNoWiki
@@ -73,6 +74,7 @@ const (
 //  useExtension(name, left,right, function replaceTokens(input string) output string)
 func main() {
 	var buffer bytes.Buffer
+	var htmlBuffer bytes.Buffer
 	testValue := "This is the start of a sentence. [[link]] \n== Now a heading w/ **not parsed bold**==\n some words **some bold words** a sentence on two lines\n the other line //italics//"
 	l := lex("test", testValue)
 	fmt.Println(l)
@@ -81,6 +83,22 @@ func main() {
 		i := l.nextItem()
 		fmt.Println(i)
 		buffer.WriteString(i.val)
+
+		if i.typ == itemParagraphStart {
+			buffer.WriteString("<p>")
+			buffer.WriteString(i.val)
+		}
+		if i.typ == itemParagraphEnd {
+
+			buffer.WriteString("</p>")
+			buffer.WriteString(i.val)
+		}
+		if i.typ == itemHeading2 {
+			//api, as it stands, requires understanding that this is a FULL heading.  and you must remove the beginning and end double equals.
+			// so it is a bit leaky.
+			//TODO: a helper method that returns the "token" for a type. e.g. getToken(typ) e.g. getToken(itemHeading2) would return "==".
+			// this would allow easier parse to html. as you'll run strings.hasprefix/suffix (trim space?) and replace w/ token.
+		}
 		if l.state == nil {
 			break
 		}
@@ -91,6 +109,8 @@ func main() {
 	fmt.Println("-------")
 	fmt.Println(buffer.String())
 	fmt.Println("-------")
+
+	fmt.Println(htmlBuffer.String())
 	time.Sleep(5 * time.Second)
 	fmt.Println("You're boring; I'm leaving.")
 
@@ -150,32 +170,38 @@ func lexText(l *lexer) stateFn {
 		//fmt.Println(l.input[l.pos:])
 
 		if strings.HasPrefix(l.input[l.pos:], "**") {
+			fmt.Println("has **")
 			if l.pos > l.start {
-				l.emit(99)
+				l.emit(itemText)
 			}
 			return lexEmphasis
 		}
 		if strings.HasPrefix(l.input[l.pos:], "//") {
+			fmt.Println("has //")
 			if l.pos > l.start {
-				l.emit(99)
+				l.emit(itemText)
 			}
 			return lexItalics
 		}
 		if strings.HasPrefix(l.input[l.pos:], "\n") {
+			fmt.Println("has \\n")
 			if l.pos > l.start {
-				l.emit(99)
+				//	fmt.Println("pos, start", l.pos, ",", l.start)
+				l.emit(itemText)
 			}
 			return lexNewLine
 		}
 		if strings.HasPrefix(l.input[l.pos:], "=") {
+			fmt.Println("has =")
 			if l.pos > l.start {
-				l.emit(99)
+				l.emit(itemText)
 			}
 			return lexHeading
 		}
 		if strings.HasPrefix(l.input[l.pos:], "[[") {
+			fmt.Println("has [[")
 			if l.pos > l.start {
-				l.emit(99)
+				l.emit(itemText)
 			}
 			return lexLink
 		}
@@ -183,12 +209,14 @@ func lexText(l *lexer) stateFn {
 		//TODO: this should check for double line break, not single as lastType.
 		// which is interesting as how do we prevent a single line emit... will need to peek ahead.
 		if l.start == 0 && (l.lastType == itemUnset || l.lastType == itemLineBreak) && isAlphaNumeric(l.peek()) {
+			fmt.Println("paragraph start")
 			l.emit(itemParagraphStart)
 			l.paragraphOpen = true
 			l.pos++
 			//l.next()
 			return lexText
 		}
+		//fmt.Println("check EOF, which calls next")
 		if l.next() == eof {
 			break
 		}
@@ -207,6 +235,7 @@ func (l *lexer) next() rune {
 	}
 	r, w := utf8.DecodeRuneInString(l.input[l.pos:])
 	l.width = w
+	//fmt.Println("adjusting pos by width", w)
 	l.pos += l.width
 	return r
 }
@@ -221,12 +250,15 @@ func lexNewLine(l *lexer) stateFn {
 
 	eolCount := 0
 	if isEndOfLine(l.peek()) {
-		fmt.Println("EOL -yes")
+		fmt.Println("EOL mark")
 		eolCount++
-		l.next()
+		//l.next()
 	}
+	//fmt.Println("lexNewline- before - ", l.pos)
 	//TODO: fire close paragraph on detection of heading, list, blank line (two new lines in a row (perhaps with spaces), hr, table, nowiki
-	l.pos += len("\n") * eolCount
+	l.pos += l.width * eolCount
+
+	//fmt.Println("lexNewline- after - ", l.pos)
 	if eolCount > 1 {
 		if l.paragraphOpen {
 			l.emit(itemParagraphEnd)
@@ -266,6 +298,8 @@ func lexLink(l *lexer) stateFn {
 		return l.errorf("unclosed link")
 	}
 	l.pos += len(rightLink) + i
+	//	fmt.Println("link pos", l.pos)
+	//	fmt.Println("link start", l.start)
 	l.emit(itemLink)
 	return lexText
 
@@ -280,30 +314,34 @@ func lexHeading(l *lexer) stateFn {
 	//l.next() //get past the line break
 	//TODO: THIS MUST BE ON A NEW LINE, and must have a space after the initial heading ==
 	headingCount := 0
-	fmt.Println("current", l.input[l.pos:l.pos+4])
-	fmt.Println("1", string(l.peek()))
+	//	fmt.Println("current", l.input[l.pos:l.pos+4])
+	//	fmt.Println("1", string(l.peek()))
 
 	for isHeading(l.peek()) {
-		fmt.Println("heading -yes")
+		//fmt.Println("heading -yes")
 		headingCount++
 		l.next()
 	}
 	if headingCount > 6 {
 		return lexText
 	}
-	fmt.Println("2", string(l.peek()))
+	//fmt.Println("2", string(l.peek()))
 	if !isSpace(l.peek()) {
-		fmt.Println("no space, not a heading")
+		//	fmt.Println("no space, not a heading")
 		l.next()
 		return lexText
 	} else {
 
-		fmt.Println("hooray . . . . . . . .. . . .")
+		//	fmt.Println("hooray . . . . . . . .. . . .")
 	}
 
 	l.pos += getHeadingEndPos(l.input, l.pos)
 	itemHeading := itemHeading1 - itemType(1) + itemType(headingCount)
+
+	//TODO: need to emit the paragraph end, but with no content, just start pos, paragraph end type, and empty.
+	l.emitManual(itemParagraphEnd, l.start, "")
 	l.emit(itemHeading)
+
 	return lexText
 }
 func getHeadingEndPos(input string, currentPos int) int {
@@ -330,40 +368,6 @@ func lexEmphasis(l *lexer) stateFn {
 	l.emit(itemBold) //TODO: reintroduce if needed
 	return lexText
 }
-func lexLeftDelim(l *lexer) stateFn {
-	fmt.Println("lexLeft")
-	l.pos += len(l.leftDelim)
-	//	if strings.HasPrefix(l.input[l.pos:], leftComment) {
-	//		return lexComment
-	//	}
-	// 	l.emit(itemLeftDelim) //TODO: reintroduce if needed
-	//l.parenDepth = 0
-	return lexInsideAction
-}
-
-func lexRightDelim(l *lexer) stateFn {
-	l.pos += len(l.rightDelim)
-	l.emit(8)
-	return lexText
-}
-
-func lexInsideAction(l *lexer) stateFn {
-	fmt.Println("lexInsideAction")
-	fmt.Println(l.rightDelim)
-	if strings.HasPrefix(l.input[l.pos:], l.rightDelim) {
-		return lexRightDelim
-
-		fmt.Println("uh oh")
-		return l.errorf("unclosed left paren")
-	}
-	switch r := l.next(); {
-	case r == eof || isEndOfLine(r):
-		return l.errorf("unclosed action")
-	}
-
-	return lexInsideAction
-}
-
 func (l *lexer) run() {
 	for state := lexText; state != nil; {
 		state(l)
@@ -371,7 +375,14 @@ func (l *lexer) run() {
 	close(l.items)
 }
 
+func (l *lexer) emitManual(t itemType, startPos int, input string) {
+	l.items <- item{t, startPos, input}
+	l.start = startPos
+	l.lastType = t
+
+}
 func (l *lexer) emit(t itemType) {
+	//fmt.Println("EMIT-", l.pos, l.start)
 	l.items <- item{t, l.start, l.input[l.start:l.pos]}
 	l.start = l.pos
 	l.lastType = t
@@ -379,14 +390,18 @@ func (l *lexer) emit(t itemType) {
 
 // peek returns but does not consume the next rune in the input.
 func (l *lexer) peek() rune {
+	//fmt.Println("PEEEEEK")
+	//fmt.Println("pre-peek pos", l.pos)
 	r := l.next()
 	l.backup()
+	//fmt.Println("peek pos", l.pos)
 	return r
 }
 
 // backup steps back one rune. Can only be called once per call of next.
 func (l *lexer) backup() {
 	l.pos -= l.width
+	//fmt.Println("backup pos", l.pos)
 }
 
 // isSpace reports whether r is a space character.
