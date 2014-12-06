@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"fmt"
+	_ "io/ioutil"
 	"strings"
 	"time"
 	"unicode"
@@ -63,6 +64,7 @@ const (
 	itemTable
 	itemText
 	itemSingleNewLine
+	itemSpaceRun
 	itemDoubleNewLine // this is also a blank line. maybe rename itemBlankLine, as this essentially means we have a paragraph above.
 	itemNoWiki
 )
@@ -73,9 +75,18 @@ const (
 // the facade around the lexer, which is a parser for creole wiki, would use reasonable defaults for creole, but would support extension via:
 //  useExtension(name, left,right, function replaceTokens(input string) output string)
 func main() {
+
+	//dat, _ := ioutil.ReadFile("creole1.0test.txt")
+	//testValue := string(dat)
+
 	var buffer bytes.Buffer
 	var htmlBuffer bytes.Buffer
-	testValue := "This is the start of a sentence. [[link]] \n== Now a heading w/ **not parsed bold**==\n some words **some bold words** a sentence on two lines\n the other line //italics//"
+	testValue := `This is the start of a sentence. [[link]] \n== Now a heading w/ **not parsed bold**==\n some words **some bold words** a sentence on two lines\n the other line //italics//
+	
+* test1
+** test1 child
+* test2
+	`
 	l := lex("test", testValue)
 	fmt.Println(l)
 	for {
@@ -93,7 +104,10 @@ func main() {
 			buffer.WriteString("</p>")
 			buffer.WriteString(i.val)
 		}
+
+		//liststart, listend
 		if i.typ == itemHeading2 {
+
 			//api, as it stands, requires understanding that this is a FULL heading.  and you must remove the beginning and end double equals.
 			// so it is a bit leaky.
 			//TODO: a helper method that returns the "token" for a type. e.g. getToken(typ) e.g. getToken(itemHeading2) would return "==".
@@ -205,6 +219,15 @@ func lexText(l *lexer) stateFn {
 			}
 			return lexLink
 		}
+		//star at beginning of line
+		if strings.HasPrefix(l.input[l.pos:], "*") && l.lastType == itemLineBreak {
+
+			fmt.Println("starts w/ *")
+			if l.pos > l.start {
+				l.emit(itemText)
+			}
+			return lexUnorderedList
+		}
 
 		//TODO: this should check for double line break, not single as lastType.
 		// which is interesting as how do we prevent a single line emit... will need to peek ahead.
@@ -304,6 +327,44 @@ func lexLink(l *lexer) stateFn {
 	return lexText
 
 }
+func lexUnorderedList(l *lexer) stateFn {
+	fmt.Println("lexingUnorderedList")
+	listCount := 0
+	//	fmt.Println("current", l.input[l.pos:l.pos+4])
+	//	fmt.Println("1", string(l.peek()))
+
+	for isUnorderedList(l.peek()) {
+		//fmt.Println("heading -yes")
+		listCount++
+		l.next()
+	}
+	if listCount > 6 {
+		return lexText
+	}
+
+	l.pos += getHeadingEndPos(l.input, l.pos)
+	//itemHeading := itemHeading1 - itemType(1) + itemType(headingCount)
+
+	//TODO: need to emit the paragraph end, but with no content, just start pos, paragraph end type, and empty.
+	if l.paragraphOpen {
+		l.emitManual(itemParagraphEnd, l.start, "")
+		l.paragraphOpen = false
+	}
+	l.emit(itemListUnordered)
+
+	return lexText
+
+}
+
+// lexSpace scans a run of space characters.
+// One space has already been seen.
+func lexSpace(l *lexer) stateFn {
+	for isSpace(l.peek()) {
+		l.next()
+	}
+	l.emit(itemSpaceRun)
+	return lexText
+}
 
 // ignore skips over the pending input before this point.
 func (l *lexer) ignore() {
@@ -339,7 +400,10 @@ func lexHeading(l *lexer) stateFn {
 	itemHeading := itemHeading1 - itemType(1) + itemType(headingCount)
 
 	//TODO: need to emit the paragraph end, but with no content, just start pos, paragraph end type, and empty.
-	l.emitManual(itemParagraphEnd, l.start, "")
+	if l.paragraphOpen {
+		l.emitManual(itemParagraphEnd, l.start, "")
+		l.paragraphOpen = false
+	}
 	l.emit(itemHeading)
 
 	return lexText
@@ -361,6 +425,10 @@ func makeHeading(n int) string {
 }
 func isHeading(r rune) bool {
 	return r == '='
+}
+
+func isUnorderedList(r rune) bool {
+	return r == '*'
 }
 func lexEmphasis(l *lexer) stateFn {
 	fmt.Println("lexingEmphasis")
