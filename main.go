@@ -30,6 +30,7 @@ type lexer struct {
 	items         chan item
 	delimiters    map[string]*Delimiter
 	lastType      itemType
+	lastLastType  itemType
 	paragraphOpen bool
 	//consider storing a last "block" hit. different than last emit type, more course grained
 }
@@ -59,8 +60,8 @@ const (
 	itemLineBreak
 	itemListUnordered
 	itemListOrdered
-	itemParagraphStart
-	itemParagraphEnd
+	//	itemParagraphStart
+	//	itemParagraphEnd
 	itemTable
 	itemText
 	itemSingleNewLine
@@ -81,7 +82,9 @@ func main() {
 
 	var buffer bytes.Buffer
 	var htmlBuffer bytes.Buffer
-	testValue := `This is the start of a sentence. [[link]] \n== Now a heading w/ **not parsed bold**==\n some words **some bold words** a sentence on two lines\n the other line //italics//
+	testValue := `This is the start of a sentence. [[link]] \n== Now a heading w/ **not parsed bold**==
+	some words **some bold words** a sentence on two lines
+	the other line //italics//
 	
 * test1
 ** test1 child
@@ -95,15 +98,15 @@ func main() {
 		fmt.Println(i)
 		buffer.WriteString(i.val)
 
-		if i.typ == itemParagraphStart {
-			buffer.WriteString("<p>")
-			buffer.WriteString(i.val)
-		}
-		if i.typ == itemParagraphEnd {
-
-			buffer.WriteString("</p>")
-			buffer.WriteString(i.val)
-		}
+		//		if i.typ == itemParagraphStart {
+		//			buffer.WriteString("<p>")
+		//			buffer.WriteString(i.val)
+		//		}
+		//		if i.typ == itemParagraphEnd {
+		//
+		//			buffer.WriteString("</p>")
+		//			buffer.WriteString(i.val)
+		//		}
 
 		//liststart, listend
 		if i.typ == itemHeading2 {
@@ -181,15 +184,15 @@ func (l *lexer) nextItem() item {
 
 func lexText(l *lexer) stateFn {
 	for {
-		//fmt.Println(l.input[l.pos:])
 
-		if strings.HasPrefix(l.input[l.pos:], "**") {
-			fmt.Println("has **")
-			if l.pos > l.start {
-				l.emit(itemText)
-			}
-			return lexEmphasis
-		}
+		//fmt.Println(l.input[l.pos:])
+		//		if strings.HasPrefix(l.input[l.pos:], "**") {
+		//			fmt.Println("has **")
+		//			if l.pos > l.start {
+		//				l.emit(itemText)
+		//			}
+		//			return lexEmphasis
+		//		}
 		if strings.HasPrefix(l.input[l.pos:], "//") {
 			fmt.Println("has //")
 			if l.pos > l.start {
@@ -217,28 +220,43 @@ func lexText(l *lexer) stateFn {
 			if l.pos > l.start {
 				l.emit(itemText)
 			}
-			return lexLink
+			return lexLinkLeft
 		}
+		if strings.HasPrefix(l.input[l.pos:], "]]") {
+			fmt.Println("has ]]")
+			if l.pos > l.start {
+				l.emit(itemText)
+			}
+			return lexLinkRight
+		}
+
 		//star at beginning of line
-		if strings.HasPrefix(l.input[l.pos:], "*") && l.lastType == itemLineBreak {
+		if strings.HasPrefix(l.input[l.pos:], "*") {
 
 			fmt.Println("starts w/ *")
 			if l.pos > l.start {
 				l.emit(itemText)
 			}
-			return lexUnorderedList
+			return lexAsterisk
 		}
 
+		if (strings.HasPrefix(l.input[l.pos:], " ") || strings.HasPrefix(l.input[l.pos:], "\t")) && isSpace(l.peek()) {
+			fmt.Println("hit space")
+			if l.pos > l.start {
+				l.emit(itemText)
+			}
+			return lexSpace
+		}
 		//TODO: this should check for double line break, not single as lastType.
 		// which is interesting as how do we prevent a single line emit... will need to peek ahead.
-		if l.start == 0 && (l.lastType == itemUnset || l.lastType == itemLineBreak) && isAlphaNumeric(l.peek()) {
-			fmt.Println("paragraph start")
-			l.emit(itemParagraphStart)
-			l.paragraphOpen = true
-			l.pos++
-			//l.next()
-			return lexText
-		}
+		//		if l.start == 0 && (l.lastType == itemUnset || l.lastType == itemLineBreak) && isAlphaNumeric(l.peek()) {
+		//			fmt.Println("paragraph start")
+		//			l.emit(itemParagraphStart)
+		//			l.paragraphOpen = true
+		//			l.pos++
+		//			//l.next()
+		//			return lexText
+		//		}
 		//fmt.Println("check EOF, which calls next")
 		if l.next() == eof {
 			break
@@ -273,7 +291,7 @@ func lexNewLine(l *lexer) stateFn {
 
 	eolCount := 0
 	if isEndOfLine(l.peek()) {
-		fmt.Println("EOL mark")
+		//fmt.Println("EOL mark")
 		eolCount++
 		//l.next()
 	}
@@ -282,15 +300,15 @@ func lexNewLine(l *lexer) stateFn {
 	l.pos += l.width * eolCount
 
 	//fmt.Println("lexNewline- after - ", l.pos)
-	if eolCount > 1 {
-		if l.paragraphOpen {
-			l.emit(itemParagraphEnd)
-		} else {
-			l.emit(itemDoubleNewLine)
-		}
-	} else {
-		//		l.pos += len("\n")
-	}
+	//	if eolCount > 1 {
+	//		if l.paragraphOpen {
+	//			l.emit(itemParagraphEnd)
+	//		} else {
+	//			l.emit(itemDoubleNewLine)
+	//		}
+	//	} else {
+	//		//		l.pos += len("\n")
+	//	}
 
 	//	if strings.HasPrefix(l.input[l.pos:], leftComment) {
 	//		return lexComment
@@ -310,29 +328,50 @@ func lexItalics(l *lexer) stateFn {
 	//l.parenDepth = 0
 	return lexText
 }
-func lexLink(l *lexer) stateFn {
-	fmt.Println("lexingLink")
+func lexLinkLeft(l *lexer) stateFn {
+	fmt.Println("lexingLinkLeft")
 
 	l.pos += len("[[")
 
-	rightLink := "]]"
-	i := strings.Index(l.input[l.pos:], rightLink)
-	if i < 0 {
-		return l.errorf("unclosed link")
-	}
-	l.pos += len(rightLink) + i
+	//	rightLink := "]]"
+	//	i := strings.Index(l.input[l.pos:], rightLink)
+	//	if i < 0 {
+	//		return l.errorf("unclosed link")
+	//	}
+	//	l.pos += len(rightLink) + i
 	//	fmt.Println("link pos", l.pos)
 	//	fmt.Println("link start", l.start)
 	l.emit(itemLink)
 	return lexText
 
 }
+func lexLinkRight(l *lexer) stateFn {
+	fmt.Println("lexingLinkRight")
+	l.pos += len("]]")
+	l.emit(itemLink)
+	return lexText
+}
+
+func lexAsterisk(l *lexer) stateFn {
+	//this should either lex as unordered list or as emphasis
+	if l.lastType == itemLineBreak || (l.lastType == itemSpaceRun && l.lastLastType == itemLineBreak) {
+		return lexUnorderedList
+	}
+	if strings.HasPrefix(l.input[l.pos:], "**") {
+		return lexEmphasis
+	}
+	l.next()
+	return lexText
+}
 func lexUnorderedList(l *lexer) stateFn {
 	fmt.Println("lexingUnorderedList")
 	listCount := 0
 	//	fmt.Println("current", l.input[l.pos:l.pos+4])
 	//	fmt.Println("1", string(l.peek()))
-
+	//	if l.lastType == itemLineBreak || l.lastType == itemSpaceRun {
+	//		//false alarm, we have a astrisk, but not on a new line.  this is bad as it should have been picked up as empasis
+	//		return lexText
+	//	}
 	for isUnorderedList(l.peek()) {
 		//fmt.Println("heading -yes")
 		listCount++
@@ -346,10 +385,10 @@ func lexUnorderedList(l *lexer) stateFn {
 	//itemHeading := itemHeading1 - itemType(1) + itemType(headingCount)
 
 	//TODO: need to emit the paragraph end, but with no content, just start pos, paragraph end type, and empty.
-	if l.paragraphOpen {
-		l.emitManual(itemParagraphEnd, l.start, "")
-		l.paragraphOpen = false
-	}
+	//	if l.paragraphOpen {
+	//		l.emitManual(itemParagraphEnd, l.start, "")
+	//		l.paragraphOpen = false
+	//	}
 	l.emit(itemListUnordered)
 
 	return lexText
@@ -359,16 +398,28 @@ func lexUnorderedList(l *lexer) stateFn {
 // lexSpace scans a run of space characters.
 // One space has already been seen.
 func lexSpace(l *lexer) stateFn {
+	isRun := false
 	for isSpace(l.peek()) {
 		l.next()
+		isRun = true
 	}
-	l.emit(itemSpaceRun)
+	if isRun {
+		l.emit(itemSpaceRun)
+	} else {
+		l.next()
+	}
 	return lexText
 }
 
 // ignore skips over the pending input before this point.
 func (l *lexer) ignore() {
 	l.start = l.pos
+}
+func emitAnyPreviousText() {
+	if l.pos > l.start {
+		l.emit(itemText)
+	}
+
 }
 func lexHeading(l *lexer) stateFn {
 	fmt.Println("lexingHeading")
@@ -396,14 +447,15 @@ func lexHeading(l *lexer) stateFn {
 		//	fmt.Println("hooray . . . . . . . .. . . .")
 	}
 
-	l.pos += getHeadingEndPos(l.input, l.pos)
+	//IF WE WANT TO GET THE ENTIRE HEADING (making the lexer smarter than it probably should be, but more useful to)
+	//	l.pos += getHeadingEndPos(l.input, l.pos)
 	itemHeading := itemHeading1 - itemType(1) + itemType(headingCount)
 
 	//TODO: need to emit the paragraph end, but with no content, just start pos, paragraph end type, and empty.
-	if l.paragraphOpen {
-		l.emitManual(itemParagraphEnd, l.start, "")
-		l.paragraphOpen = false
-	}
+	//	if l.paragraphOpen {
+	//		l.emitManual(itemParagraphEnd, l.start, "")
+	//		l.paragraphOpen = false
+	//	}
 	l.emit(itemHeading)
 
 	return lexText
@@ -453,7 +505,11 @@ func (l *lexer) emit(t itemType) {
 	//fmt.Println("EMIT-", l.pos, l.start)
 	l.items <- item{t, l.start, l.input[l.start:l.pos]}
 	l.start = l.pos
+	l.lastLastType = l.lastType
 	l.lastType = t
+
+	//fmt.Println("lastlasttype", l.lastLastType)
+	//fmt.Println("lastType", l.lastType)
 }
 
 // peek returns but does not consume the next rune in the input.
