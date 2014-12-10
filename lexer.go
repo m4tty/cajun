@@ -416,17 +416,35 @@ func lexWikiLineBreak(l *lexer) stateFn {
 	//l.parenDepth = 0
 	return lexText
 }
+
 func lexHorizontalRule(l *lexer) stateFn {
 	//TODO: write a function that checks for ONLY whitespace on the line before this point. isPrecededByWhitespaceOnly() maybe getPreviousRune(currentRunePos)
 	fmt.Println("lexingHorizontalRule")
 	if l.lastType == itemNewLine || l.lastType == itemUnset || (l.lastType == itemSpaceRun && l.lastLastType == itemNewLine) {
-		fmt.Println("-------------------")
-		fmt.Printf("l.lastType %+v\n", l.lastType)
-		fmt.Printf("l.lastLastType %+v\n", l.lastLastType)
-		l.emitAnyPreviousText()
-		l.pos += len(horizontalRuleToken)
-		l.emit(itemHorizontalRule) //TODO: reintroduce if needed
-
+		i := l.pos
+		whitespaceOnly := true
+		//handle edge case in which we have just started lexing and we have text e.g. "test test ----"
+		if l.lastType == itemUnset {
+			for i > 0 {
+				if strings.HasPrefix(l.input[i:], " ") || strings.HasPrefix(l.input[i:], "\t") {
+					whitespaceOnly = true
+				} else {
+					whitespaceOnly = false
+					break
+				}
+				i--
+			}
+		}
+		if whitespaceOnly {
+			fmt.Println("-------------------")
+			fmt.Printf("l.lastType %+v\n", l.lastType)
+			fmt.Printf("l.lastLastType %+v\n", l.lastLastType)
+			l.emitAnyPreviousText()
+			l.pos += len(horizontalRuleToken)
+			l.emit(itemHorizontalRule) //TODO: reintroduce if needed
+		} else {
+			l.next()
+		}
 	} else {
 		l.next()
 	}
