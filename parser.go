@@ -5,50 +5,86 @@ import (
 	"fmt"
 )
 
+var itemName = map[itemType][]string{
+	itemBold:            []string{"<strong>", "</strong>"},
+	itemEOF:             []string{"</br>", ""},
+	itemFreeLink:        []string{"<a href=\"{{val}}\">{{val}}</a>", ""},
+	itemHeading1:        []string{"<h1>", "</h1>"},
+	itemHeading2:        []string{"<h2>", "</h2>"},
+	itemHeading3:        []string{"<h3>", "</h3>"},
+	itemHeading4:        []string{"<h4>", "</h4>"},
+	itemHeading5:        []string{"<h5>", "</h5>"},
+	itemHeading6:        []string{"<h6>", "</h6>"},
+	iitemHorizontalRule: []string{"<hr>", ""},
+	itemImage:           []string{"<img src=\"{{location}}\" alt=\"{{text}}\" />", ""},
+	itemItalics:         []string{"<em>", "</em>"},
+	itemLink:            []string{"<a href=\"{{location}}\">{{text}}</a>", ""},
+	iitemLineBreak:      []string{"<br />", ""},
+	itemImage:           []string{"<img src=\"{{location}}\" alt=\"{{text}}\" />", ""},
+	itemListUnordered:   "listunordered",
+	itemListOrdered:     "listordered",
+	itemTable:           "table",
+	itemText:            "text",
+	itemNewLine:         "newline",
+	itemSpaceRun:        "spaces",
+	itemNoWiki:          "nowiki",
+	itemWikiLineBreak:   "wikilinebreak",
+}
+
 type parser struct {
-	name     string
-	input    string
-	boldOpen bool
-	openList map[itemType]bool //maybe an int instead of bool, to count the open items ++/--
+	name           string
+	input          string
+	boldOpen       bool
+	openList       map[itemType]int //maybe an int instead of bool, to count the open items ++/--
+	openItemsStack *openItems
 }
 
 func (p *parser) isOpen(typ itemType) bool {
 	if val, ok := p.openList[typ]; ok {
-		return val
+		return val > 0
 	} else {
 		return false
 	}
 }
 
+func (p *parser) closeOthers(typ itemType) string {
+	for p.openItemsStack.Pop() != typ {
+
+	}
+
+}
+
 //maintain an open list.  send writeCloses()
 
 func (p *parser) Transform(input string) (output string, terror error) {
-	p.openList = make(map[itemType]bool)
+	p.openList = make(map[itemType]int)
 	var buffer bytes.Buffer
 	l := lex("creole", input)
 	fmt.Println(l)
 
-	openItemsStack := new(openItems)
+	p.openItemsStack = new(openItems)
 	for {
 		item := l.nextItem()
 		switch item.typ {
 		case itemBold:
-			openItemsStack.Push(itemBold)
+			//**//test**// should be <strong><em>test</em></strong>
 			if p.isOpen(itemBold) == false {
 				buffer.WriteString("<strong>")
-				p.openList[item.typ] = true
+				p.openItemsStack.Push(itemBold)
+				p.openList[item.typ]++
 			} else {
+				buffer.WriteString(p.closeOthers(itemBold))
 				buffer.WriteString("</strong>")
-				p.openList[item.typ] = false
+				p.openList[item.typ]--
 			}
 			break
 		case itemItalics:
 			if p.isOpen(itemItalics) == false {
 				buffer.WriteString("<em>")
-				p.openList[item.typ] = true
+				p.openList[item.typ]++
 			} else {
 				buffer.WriteString("</em>")
-				p.openList[item.typ] = false
+				p.openList[item.typ]--
 			}
 			break
 		case itemNewLine:
@@ -66,6 +102,11 @@ func (p *parser) Transform(input string) (output string, terror error) {
 		}
 	}
 	return buffer.String(), nil
+}
+
+func (p *parser) processItem(item item) (string, error) {
+
+	return "", nil
 }
 
 type openItems struct {
