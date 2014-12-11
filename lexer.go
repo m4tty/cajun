@@ -18,19 +18,20 @@ const itemLeftDelim = 6
 type stateFn func(*lexer) stateFn
 
 type lexer struct {
-	name          string
-	input         string
-	leftDelim     string
-	rightDelim    string
-	state         stateFn
-	start         int
-	pos           int
-	width         int
-	items         chan item
-	delimiters    map[string]*Delimiter
-	lastType      itemType
-	lastLastType  itemType
-	paragraphOpen bool
+	name         string
+	input        string
+	leftDelim    string
+	rightDelim   string
+	state        stateFn
+	start        int
+	pos          int
+	width        int
+	items        chan item
+	delimiters   map[string]*Delimiter
+	lastType     itemType
+	lastLastType itemType
+	listDepth    int
+	breakCount   int // a count of \newlines emitted, since last list
 	//consider storing a last "block" hit. different than last emit type, more course grained
 }
 
@@ -165,7 +166,7 @@ func lexText(l *lexer) stateFn {
 			l.emitAnyPreviousText()
 			return lexWikiLineBreak
 		}
-		if strings.HasPrefix(l.input[l.pos:], "\n") {
+		if strings.HasPrefix(l.input[l.pos:], "\n") || strings.HasPrefix(l.input[l.pos:], "\r") {
 			l.emitAnyPreviousText()
 			return lexNewLine
 		}
@@ -191,6 +192,13 @@ func lexText(l *lexer) stateFn {
 			// one use case that could be a itemText is when a single * shows up in the middle of some text.
 			//  not after a new line, not after a new line and spaces.
 			return lexAsterisk
+		}
+
+		if strings.HasPrefix(l.input[l.pos:], "#") {
+			l.emitAnyPreviousText()
+			// one use case that could be a itemText is when a single * shows up in the middle of some text.
+			//  not after a new line, not after a new line and spaces.
+			return lexOrderedList
 		}
 		if strings.HasPrefix(l.input[l.pos:], horizontalRuleToken) {
 			return lexHorizontalRule
@@ -394,9 +402,21 @@ func lexNewLine(l *lexer) stateFn {
 	l.pos += l.width
 
 	l.emit(itemNewLine) //TODO: reintroduce if needed
+	l.incrementBreaksSinceList()
 	return lexText
 }
-
+func (l *lexer) resetListDepth() {
+	l.listDepth = 0
+}
+func (l *lexer) resetBreaksSinceList() {
+	l.breakCount = 0
+}
+func (l *lexer) incrementBreaksSinceList() {
+	l.breakCount++
+	if l.breakCount >= 2 {
+		l.resetListDepth()
+	}
+}
 func lexFreeLink(l *lexer) stateFn {
 
 	fmt.Println("lexingFreeLink")
@@ -417,15 +437,17 @@ func lexWikiLineBreak(l *lexer) stateFn {
 	return lexText
 }
 
-func lexHorizontalRule(l *lexer) stateFn {
-	//TODO: write a function that checks for ONLY whitespace on the line before this point. isPrecededByWhitespaceOnly() maybe getPreviousRune(currentRunePos)
-	fmt.Println("lexingHorizontalRule")
+func (l *lexer) isPrecededByWhitespace(startPos int) bool {
+	fmt.Printf("whitespace: %+v\n", l.input[startPos:])
+	fmt.Printf("l.lastType %+v\n", l.lastType)
+	fmt.Printf("l.lastLastType %+v\n", l.lastLastType)
+	fmt.Printf("startPos %+v\n", startPos)
+	whitespaceOnly := false
 	if l.lastType == itemNewLine || l.lastType == itemUnset || (l.lastType == itemSpaceRun && l.lastLastType == itemNewLine) {
-		i := l.pos
-		whitespaceOnly := true
+		i := startPos
 		//handle edge case in which we have just started lexing and we have text e.g. "test test ----"
-		if l.lastType == itemUnset {
-			for i > 0 {
+		if l.lastType == itemUnset && startPos > 0 {
+			for i >= 0 {
 				if strings.HasPrefix(l.input[i:], " ") || strings.HasPrefix(l.input[i:], "\t") {
 					whitespaceOnly = true
 				} else {
@@ -434,20 +456,46 @@ func lexHorizontalRule(l *lexer) stateFn {
 				}
 				i--
 			}
-		}
-		if whitespaceOnly {
-			fmt.Println("-------------------")
-			fmt.Printf("l.lastType %+v\n", l.lastType)
-			fmt.Printf("l.lastLastType %+v\n", l.lastLastType)
-			l.emitAnyPreviousText()
-			l.pos += len(horizontalRuleToken)
-			l.emit(itemHorizontalRule) //TODO: reintroduce if needed
 		} else {
-			l.next()
+			whitespaceOnly = true
 		}
+	}
+	return whitespaceOnly
+}
+
+func lexHorizontalRule(l *lexer) stateFn {
+	//TODO: write a function that checks for ONLY whitespace on the line before this point. isPrecededByWhitespaceOnly() maybe getPreviousRune(currentRunePos)
+	fmt.Println("lexingHorizontalRule")
+
+	if l.isPrecededByWhitespace(l.pos) {
+		//	if l.lastType == itemNewLine || l.lastType == itemUnset || (l.lastType == itemSpaceRun && l.lastLastType == itemNewLine) {
+		//		i := l.pos
+		//		whitespaceOnly := true
+		//		//handle edge case in which we have just started lexing and we have text e.g. "test test ----"
+		//		if l.lastType == itemUnset {
+		//			for i > 0 {
+		//				if strings.HasPrefix(l.input[i:], " ") || strings.HasPrefix(l.input[i:], "\t") {
+		//					whitespaceOnly = true
+		//				} else {
+		//					whitespaceOnly = false
+		//					break
+		//				}
+		//				i--
+		//			}
+		//		}
+		//		if whitespaceOnly {
+		fmt.Println("-------------------")
+		fmt.Printf("l.lastType %+v\n", l.lastType)
+		fmt.Printf("l.lastLastType %+v\n", l.lastLastType)
+		l.emitAnyPreviousText()
+		l.pos += len(horizontalRuleToken)
+		l.emit(itemHorizontalRule) //TODO: reintroduce if needed
 	} else {
 		l.next()
 	}
+	//	} else {
+	//		l.next()
+	//	}
 	return lexText
 }
 func lexItalics(l *lexer) stateFn {
@@ -484,14 +532,14 @@ func lexLinkRight(l *lexer) stateFn {
 	return lexText
 }
 func lexOrderedList(l *lexer) stateFn {
-
 	poundCount := 0
 	for isPound(l.peek()) {
 		poundCount++
 		l.next()
 	}
-
-	l.emit(itemListOrdered)
+	if isSpace(l.peek()) && l.isPrecededByWhitespace(l.pos-poundCount) {
+		l.emit(itemListOrdered)
+	}
 	return lexText
 }
 func isPound(r rune) bool {
@@ -500,10 +548,40 @@ func isPound(r rune) bool {
 func isAsterisk(r rune) bool {
 	return string(r) == "*"
 }
+func lexAsterisk(l *lexer) stateFn {
+	fmt.Printf("l.input[l.pos:] %+v\n", l.input[l.pos:])
+	asteriskCount := 0
+	for isAsterisk(l.peek()) {
+		asteriskCount++
+		l.next()
+	}
+	fmt.Printf("asteriskCount %+v\n", asteriskCount)
+	fmt.Printf("isSpace(l.peek()) %+v\n", isSpace(l.peek()))
+	fmt.Printf("l.isPrecededByWhitespace() %+v\n", l.isPrecededByWhitespace(l.pos-asteriskCount))
+	if isSpace(l.peek()) && l.isPrecededByWhitespace(l.pos-asteriskCount) {
+		if l.listDepth+1 == asteriskCount {
+			l.emit(itemListUnordered)
+			l.listDepth++
+			l.breakCount = 0
+		} else {
+			//here we have 2 or more asterisks, at the beginning of a line (perhaps w/ whitespace), but out of the blue...
+			// so I think we will treat the first two as bold, then let the rest be text?
+			//adjust l.pos to be only 2 asterisks and emit bold
+			l.pos = l.pos - (asteriskCount - 2)
+			l.emit(itemBold)
+		}
+	} else {
+		fmt.Printf("in else.... do to whitespace issues")
+		if asteriskCount == 2 {
+			l.emit(itemBold)
+		}
+	}
+	return lexText
+}
 
 // interpreting if something is bold or a list is an area where complexity lives. could consider
 //  just lexing asterisk counts and don't make a determination.  this ambiguity is a bit of a problem.
-func lexAsterisk(l *lexer) stateFn {
+func lexAsteriskOld(l *lexer) stateFn {
 
 	asteriskCount := 0
 	//	fmt.Println("current", l.input[l.pos:l.pos+4])
@@ -530,37 +608,6 @@ func lexAsterisk(l *lexer) stateFn {
 	//	}
 	//	l.next()
 	return lexText
-}
-func lexUnorderedList(l *lexer) stateFn {
-	fmt.Println("lexingUnorderedList")
-	listCount := 0
-	//	fmt.Println("current", l.input[l.pos:l.pos+4])
-	//	fmt.Println("1", string(l.peek()))
-	//	if l.lastType == itemLineBreak || l.lastType == itemSpaceRun {
-	//		//false alarm, we have a astrisk, but not on a new line.  this is bad as it should have been picked up as empasis
-	//		return lexText
-	//	}
-	for isUnorderedList(l.peek()) {
-		//fmt.Println("heading -yes")
-		listCount++
-		l.next()
-	}
-	if listCount > 6 {
-		return lexText
-	}
-
-	l.pos += getHeadingLength(l.input, l.pos)
-	//itemHeading := itemHeading1 - itemType(1) + itemType(headingCount)
-
-	//TODO: need to emit the paragraph end, but with no content, just start pos, paragraph end type, and empty.
-	//	if l.paragraphOpen {
-	//		l.emitManual(itemParagraphEnd, l.start, "")
-	//		l.paragraphOpen = false
-	//	}
-	l.emit(itemListUnordered)
-
-	return lexText
-
 }
 
 // lexSpace scans a run of space characters.
