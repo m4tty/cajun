@@ -86,6 +86,9 @@ const (
 	itemListUnordered
 	itemListOrdered
 	itemTable
+	itemTableItem
+	itemTableRow
+	itemTableHeaderItem
 	itemText
 	itemNewLine
 	itemSpaceRun
