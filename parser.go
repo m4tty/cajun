@@ -60,22 +60,28 @@ func (p *parser) wasPreClosed(typ itemType) bool {
 	}
 }
 
+// -> **// test **// and **// test2 **//
+//   -> isOpen(strong). no. add to open items list.
+//	 -> isOpen(italics). no. add to open items list.
+//	 -> test
+//	 -> isOpen(italics). yes. close all. closing first pop. strong. add to preclose.  closing second pop. italics.
+//	 -> isOpen(strong) no. but should not write open tag either.
+
 func (p *parser) closeOthers(typ itemType) string {
 	var buffer bytes.Buffer
 	for p.openItemsStack.Len() > 0 {
 		t := p.openItemsStack.Pop()
 		if val, ok := itemTokens[t]; ok {
-			if !p.wasPreClosed(t) {
-				buffer.WriteString(val[1])
+			buffer.WriteString(val[1])
+			p.openList[t]--
+			if t == typ {
+				break
+			} else {
+				// closed early
+				p.preClosedList[t]++
 			}
 		}
-		if t == typ {
-			p.openList[t]--
-			p.preClosedList[t]-- // legit close
-			break
-		} else {
-			p.preClosedList[t]++
-		}
+
 	}
 	return buffer.String()
 }
@@ -98,21 +104,31 @@ func (p *parser) Transform(input string) (output string, terror error) {
 		switch item.typ {
 		case itemBold:
 			//**//test**// should be <strong><em>test</em></strong>
-			if p.isOpen(itemBold) == false {
-				buffer.WriteString("<strong>")
-				p.openItemsStack.Push(itemBold)
-				p.openList[item.typ]++
+			if p.wasPreClosed(itemBold) {
+				//ignore this item one time
+				p.preClosedList[itemBold]--
 			} else {
-				buffer.WriteString(p.closeOthers(itemBold))
+				if p.isOpen(itemBold) == false {
+					buffer.WriteString("<strong>")
+					p.openItemsStack.Push(itemBold)
+					p.openList[item.typ]++
+				} else {
+					buffer.WriteString(p.closeOthers(itemBold))
+				}
 			}
 			break
 		case itemItalics:
-			if p.isOpen(itemItalics) == false {
-				buffer.WriteString("<em>")
-				p.openItemsStack.Push(itemItalics)
-				p.openList[item.typ]++
+			if p.wasPreClosed(itemItalics) {
+				//ignore this item one time
+				p.preClosedList[itemItalics]--
 			} else {
-				buffer.WriteString(p.closeOthers(itemItalics))
+				if p.isOpen(itemItalics) == false {
+					buffer.WriteString("<em>")
+					p.openItemsStack.Push(itemItalics)
+					p.openList[item.typ]++
+				} else {
+					buffer.WriteString(p.closeOthers(itemItalics))
+				}
 			}
 			break
 		case itemNewLine:

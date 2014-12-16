@@ -441,10 +441,6 @@ func lexWikiLineBreak(l *lexer) stateFn {
 }
 
 func (l *lexer) isPrecededByWhitespace(startPos int) bool {
-	fmt.Printf("whitespace: %+v\n", l.input[startPos:])
-	fmt.Printf("l.lastType %+v\n", l.lastType)
-	fmt.Printf("l.lastLastType %+v\n", l.lastLastType)
-	fmt.Printf("startPos %+v\n", startPos)
 	whitespaceOnly := false
 	if l.lastType == itemNewLine || l.lastType == itemUnset || (l.lastType == itemSpaceRun && l.lastLastType == itemNewLine) {
 		i := startPos

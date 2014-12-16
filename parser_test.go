@@ -15,7 +15,8 @@ var parserTests = []parserTest{
 	{"text with bold", "hello-**blah**-world", "hello-<strong>blah</strong>-world"},
 	{"text with italics", "hello-//blah//-world", "hello-<em>blah</em>-world"},
 	{"text with bad order", "hello-**//blah**//-world", "hello-<strong><em>blah</em></strong>-world"},
-	{"text with bad order, twice", "hello-**//blah**//-world**//blah**//", "hello-<strong><em>blah</em></strong>-world<strong><em>blah</em></strong>"},
+	{"text with bad order, twice", "hello-**//blah**//-world**//blah**// this is a **test**", "hello-<strong><em>blah</em></strong>-world<strong><em>blah</em></strong> this is a <strong>test</strong>"},
+	{"text with bad order, twice", "hello-**//blah**//**//blah**//", "hello-<strong><em>blah</em></strong><strong><em>blah</em></strong>"},
 }
 
 func TestParser(t *testing.T) {
