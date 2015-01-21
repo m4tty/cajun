@@ -456,21 +456,28 @@ func (l *lexer) isPrecededByWhitespace(startPos int) bool {
 	return whitespaceOnly
 }
 
-func lexHorizontalRule(l *lexer) stateFn {
-	tempPos := l.pos + len(horizontalRuleToken)
-	var isFollowedByWhiteSpace = false
+func isFollowedByWhiteSpace(input string, currentPos int) bool {
+	var justWhiteSpace = false
+	var tempPos = currentPos
 	for {
-		r, w := utf8.DecodeRuneInString(l.input[tempPos:])
+		r, w := utf8.DecodeRuneInString(input[tempPos:])
 		if isSpace(r) {
 			tempPos = tempPos + w
 			continue
 		}
-		if isEndOfLine(r) || tempPos == len(l.input) {
-			isFollowedByWhiteSpace = true
+		if isEndOfLine(r) || tempPos == len(input) {
+			justWhiteSpace = true
 		}
 		break
 	}
-	if isFollowedByWhiteSpace && l.isPrecededByWhitespace(l.pos) {
+	return justWhiteSpace
+}
+
+func lexHorizontalRule(l *lexer) stateFn {
+	tempPos := l.pos + len(horizontalRuleToken)
+	var followedByWhiteSpace = false
+	followedByWhiteSpace = isFollowedByWhiteSpace(l.input, tempPos)
+	if followedByWhiteSpace && l.isPrecededByWhitespace(l.pos) {
 		//if l.isPrecededByWhitespace(l.pos) {
 		l.emitAnyPreviousText()
 		l.pos += len(horizontalRuleToken)
@@ -616,6 +623,8 @@ func (l *lexer) emitAnyPreviousText() {
 func lexHeading(l *lexer) stateFn {
 	//l.next() //get past the line break
 	//TODO: THIS MUST BE ON A NEW LINE, and must have a space after the initial heading ==
+	//TODO: can end with heading close, but a heading close must be followed by whitespace. then any equalssigns will be ignored
+	// itemHeadingCloseRun (a heading run, but too many equals, if it begining of line, it is text, at the end of a line, it could be a heading close)
 	headingCount := 0
 	//	fmt.Println("current", l.input[l.pos:l.pos+4])
 	//	fmt.Println("1", string(l.peek()))
@@ -626,6 +635,11 @@ func lexHeading(l *lexer) stateFn {
 		l.next()
 	}
 	if headingCount > 6 {
+		fmt.Println("headingCount")
+		//if more than six probably just return equalsSignRun (not a heading, but should be closed like one).
+		if isFollowedByWhiteSpace(l.input, l.pos) {
+			fmt.Println("this is an end of line heading, but has too many equals")
+		}
 		return lexText
 	}
 

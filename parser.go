@@ -1,6 +1,9 @@
 package cajun
 
-import "bytes"
+import (
+	"bytes"
+	"fmt"
+)
 
 var itemTokens = map[itemType][]string{
 	itemBold:           []string{"<strong>", "</strong>"},
@@ -219,6 +222,24 @@ Done:
 					p.openList[item.typ]++
 				} else {
 					buffer.WriteString(p.closeOthers(itemItalics))
+				}
+			}
+			break
+		case itemHeading1, itemHeading2, itemHeading3, itemHeading4, itemHeading5, itemHeading6:
+			if p.wasPreClosed(item.typ) {
+				//ignore this item one time
+				p.preClosedList[item.typ]--
+			} else {
+				if p.isOpen(item.typ) == false {
+					if val, ok := itemTokens[item.typ]; ok {
+						buffer.WriteString(val[0])
+					} else {
+						fmt.Errorf("Can not find item token")
+					}
+					p.openItemsStack.Push(item.typ)
+					p.openList[item.typ]++
+				} else {
+					buffer.WriteString(p.closeOthers(item.typ))
 				}
 			}
 			break
