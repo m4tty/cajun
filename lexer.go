@@ -217,7 +217,6 @@ func lexText(l *lexer) stateFn {
 		}
 	}
 	l.emitAnyPreviousText()
-
 	l.emit(itemEOF)
 	return nil
 }
@@ -229,7 +228,6 @@ func (l *lexer) next() rune {
 	}
 	r, w := utf8.DecodeRuneInString(l.input[l.pos:])
 	l.width = w
-	//fmt.Println("adjusting pos by width", w)
 	l.pos += l.width
 	return r
 }
@@ -267,7 +265,6 @@ func lexLinkLocation(l *lexer) stateFn {
 
 func lexLinkInnerDelimiter(l *lexer) stateFn {
 
-	fmt.Println("lexingLinkInnerDelim")
 	l.width = len("|")
 	l.pos += l.width
 
@@ -277,7 +274,6 @@ func lexLinkInnerDelimiter(l *lexer) stateFn {
 func lexLinkText(l *lexer) stateFn {
 
 	length := getLinkLength(l.input, l.pos, "]]")
-	fmt.Println("lexingLinkText")
 	l.width = length
 	l.pos += l.width
 
@@ -286,7 +282,6 @@ func lexLinkText(l *lexer) stateFn {
 }
 func lexInsideLink(l *lexer) stateFn {
 
-	fmt.Println("lexingInsideLink")
 	closed := isExplicitClose(l.input, l.pos, "]]")
 	if closed {
 		l.emitAnyPreviousText()
@@ -331,7 +326,6 @@ func lexImageLocation(l *lexer) stateFn {
 }
 
 func lexImageInnerDelimiter(l *lexer) stateFn {
-	fmt.Println("lexingImageInnerDelim")
 	l.width = len("|")
 	l.pos += l.width
 	l.emit(itemImageDelimiter) //TODO: reintroduce if needed
@@ -339,7 +333,6 @@ func lexImageInnerDelimiter(l *lexer) stateFn {
 }
 func lexImageText(l *lexer) stateFn {
 	length := getLinkLength(l.input, l.pos, "}}")
-	fmt.Println("lexingImageText")
 	l.width = length
 	l.pos += l.width
 	l.emit(itemImageText) //TODO: reintroduce if needed
@@ -347,7 +340,6 @@ func lexImageText(l *lexer) stateFn {
 }
 func lexInsideImage(l *lexer) stateFn {
 
-	fmt.Println("lexingInsideImage")
 	closed := isExplicitClose(l.input, l.pos, "}}")
 	if closed {
 		l.emitAnyPreviousText()
@@ -361,7 +353,6 @@ func lexInsideImage(l *lexer) stateFn {
 		if strings.HasPrefix(l.input[l.pos:], "|") {
 			return lexImageInnerDelimiter
 		}
-		fmt.Printf("l.lastType %+v\n", l.lastType)
 		if l.lastType == itemImageLeftDelimiter {
 			return lexImageLocation
 		}
@@ -376,7 +367,6 @@ func lexInsideImage(l *lexer) stateFn {
 	return lexText
 }
 func lexImageLeft(l *lexer) stateFn {
-	fmt.Println("lexingImageLeft")
 
 	l.pos += len("{{")
 
@@ -393,14 +383,12 @@ func lexImageLeft(l *lexer) stateFn {
 
 }
 func lexImageRight(l *lexer) stateFn {
-	fmt.Println("lexingImageRight")
 	l.pos += len("}}")
 	l.emit(itemImageRightDelimiter)
 	return lexText
 }
 func lexNewLine(l *lexer) stateFn {
 
-	fmt.Println("lexingNewLine")
 	l.width = len("\n")
 	l.pos += l.width
 
@@ -422,7 +410,6 @@ func (l *lexer) incrementBreaksSinceList() {
 }
 func lexFreeLink(l *lexer) stateFn {
 
-	fmt.Println("lexingFreeLink")
 	length := getFreeLinkLength(l.input, l.pos)
 	l.pos += length
 
@@ -430,7 +417,6 @@ func lexFreeLink(l *lexer) stateFn {
 	return lexText
 }
 func lexWikiLineBreak(l *lexer) stateFn {
-	fmt.Println("lexingWikiLineBreak")
 	l.pos += len("\\\\")
 	//	if strings.HasPrefix(l.input[l.pos:], leftComment) {
 	//		return lexComment
@@ -442,63 +428,59 @@ func lexWikiLineBreak(l *lexer) stateFn {
 
 func (l *lexer) isPrecededByWhitespace(startPos int) bool {
 	whitespaceOnly := false
-	if l.lastType == itemNewLine || l.lastType == itemUnset || (l.lastType == itemSpaceRun && l.lastLastType == itemNewLine) {
-		i := startPos
-		//handle edge case in which we have just started lexing and we have text e.g. "test test ----"
-		if l.lastType == itemUnset && startPos > 0 {
+
+	i := startPos
+	//handle edge case in which we have just started lexing and we have text e.g. "test test ----"
+	if l.lastType == itemUnset {
+		if startPos > 0 {
 			for i >= 0 {
 				if strings.HasPrefix(l.input[i:], " ") || strings.HasPrefix(l.input[i:], "\t") {
 					whitespaceOnly = true
 				} else {
-					whitespaceOnly = false
+					if strings.HasPrefix(l.input[i:], "\n") {
+						whitespaceOnly = true
+					} else {
+						whitespaceOnly = false
+					}
 					break
 				}
 				i--
 			}
 		} else {
-			whitespaceOnly = true
+			return true
 		}
+	}
+	if l.lastType == itemNewLine || (l.lastType == itemSpaceRun && l.lastLastType == itemNewLine) || (l.lastType == itemSpaceRun && l.lastLastType == itemUnset) {
+		return true
 	}
 	return whitespaceOnly
 }
 
 func lexHorizontalRule(l *lexer) stateFn {
-	//TODO: write a function that checks for ONLY whitespace on the line before this point. isPrecededByWhitespaceOnly() maybe getPreviousRune(currentRunePos)
-	fmt.Println("lexingHorizontalRule")
-
-	if l.isPrecededByWhitespace(l.pos) {
-		//	if l.lastType == itemNewLine || l.lastType == itemUnset || (l.lastType == itemSpaceRun && l.lastLastType == itemNewLine) {
-		//		i := l.pos
-		//		whitespaceOnly := true
-		//		//handle edge case in which we have just started lexing and we have text e.g. "test test ----"
-		//		if l.lastType == itemUnset {
-		//			for i > 0 {
-		//				if strings.HasPrefix(l.input[i:], " ") || strings.HasPrefix(l.input[i:], "\t") {
-		//					whitespaceOnly = true
-		//				} else {
-		//					whitespaceOnly = false
-		//					break
-		//				}
-		//				i--
-		//			}
-		//		}
-		//		if whitespaceOnly {
-		fmt.Println("-------------------")
-		fmt.Printf("l.lastType %+v\n", l.lastType)
-		fmt.Printf("l.lastLastType %+v\n", l.lastLastType)
+	tempPos := l.pos + len(horizontalRuleToken)
+	var isFollowedByWhiteSpace = false
+	for {
+		r, w := utf8.DecodeRuneInString(l.input[tempPos:])
+		if isSpace(r) {
+			tempPos = tempPos + w
+			continue
+		}
+		if isEndOfLine(r) || tempPos == len(l.input) {
+			isFollowedByWhiteSpace = true
+		}
+		break
+	}
+	if isFollowedByWhiteSpace && l.isPrecededByWhitespace(l.pos) {
+		//if l.isPrecededByWhitespace(l.pos) {
 		l.emitAnyPreviousText()
 		l.pos += len(horizontalRuleToken)
 		l.emit(itemHorizontalRule) //TODO: reintroduce if needed
 	} else {
 		l.next()
 	}
-	//	} else {
-	//		l.next()
-	//	}
 	return lexText
 }
 func lexItalics(l *lexer) stateFn {
-	fmt.Println("lexingItalics")
 	l.pos += len("//")
 	//	if strings.HasPrefix(l.input[l.pos:], leftComment) {
 	//		return lexComment
@@ -508,7 +490,6 @@ func lexItalics(l *lexer) stateFn {
 	return lexText
 }
 func lexLinkLeft(l *lexer) stateFn {
-	fmt.Println("lexingLinkLeft")
 
 	l.pos += len("[[")
 
@@ -525,7 +506,6 @@ func lexLinkLeft(l *lexer) stateFn {
 
 }
 func lexLinkRight(l *lexer) stateFn {
-	fmt.Println("lexingLinkRight")
 	l.pos += len("]]")
 	l.emit(itemLinkRightDelimiter)
 	return lexText
@@ -547,16 +527,14 @@ func isPound(r rune) bool {
 func isAsterisk(r rune) bool {
 	return string(r) == "*"
 }
+
 func lexAsterisk(l *lexer) stateFn {
-	fmt.Printf("l.input[l.pos:] %+v\n", l.input[l.pos:])
 	asteriskCount := 0
 	for isAsterisk(l.peek()) {
 		asteriskCount++
 		l.next()
 	}
-	fmt.Printf("asteriskCount %+v\n", asteriskCount)
-	fmt.Printf("isSpace(l.peek()) %+v\n", isSpace(l.peek()))
-	fmt.Printf("l.isPrecededByWhitespace() %+v\n", l.isPrecededByWhitespace(l.pos-asteriskCount))
+
 	if isSpace(l.peek()) && l.isPrecededByWhitespace(l.pos-asteriskCount) {
 		if l.listDepth+1 == asteriskCount {
 			l.emit(itemListUnordered)
@@ -570,7 +548,6 @@ func lexAsterisk(l *lexer) stateFn {
 			l.emit(itemBold)
 		}
 	} else {
-		fmt.Printf("in else.... do to whitespace issues")
 		if asteriskCount == 2 {
 			l.emit(itemBold)
 		}
@@ -637,7 +614,6 @@ func (l *lexer) emitAnyPreviousText() {
 
 }
 func lexHeading(l *lexer) stateFn {
-	fmt.Println("lexingHeading")
 	//l.next() //get past the line break
 	//TODO: THIS MUST BE ON A NEW LINE, and must have a space after the initial heading ==
 	headingCount := 0
@@ -740,7 +716,6 @@ func isUnorderedList(r rune) bool {
 	return r == '*'
 }
 func lexEmphasis(l *lexer) stateFn {
-	fmt.Println("lexingEmphasis")
 	l.pos += len("**")
 	l.emit(itemBold) //TODO: reintroduce if needed
 	return lexText
@@ -759,7 +734,6 @@ func (l *lexer) emitManual(t itemType, startPos int, input string) {
 
 }
 func (l *lexer) emit(t itemType) {
-	//fmt.Println("EMIT-", l.pos, l.start)
 	l.items <- item{t, l.start, l.input[l.start:l.pos]}
 	l.start = l.pos
 	l.lastLastType = l.lastType

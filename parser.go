@@ -1,9 +1,6 @@
 package cajun
 
-import (
-	"bytes"
-	"fmt"
-)
+import "bytes"
 
 var itemTokens = map[itemType][]string{
 	itemBold:           []string{"<strong>", "</strong>"},
@@ -26,7 +23,7 @@ var itemTokens = map[itemType][]string{
 	itemTable:           []string{"<table>", "</table>"},
 	itemTableRow:        []string{"<tr>", "</tr>"},
 	itemTableHeaderItem: []string{"<th>", "</th>"},
-	itemText:            []string{"<td>", "</td>"},
+	itemText:            []string{"<p>", "</p>"},
 	itemTableItem:       []string{"<td>", "</td>"},
 	itemNewLine:         []string{"</br>", ""},
 	//itemParagraph:       []string{"<p>", "</p>"},
@@ -42,6 +39,8 @@ type parser struct {
 	openList       map[itemType]int //maybe an int instead of bool, to count the open items ++/--
 	preClosedList  map[itemType]int //maybe an int instead of bool, to count the open items ++/--
 	openItemsStack *openItems
+	items          []item
+	lex            *lexer
 }
 
 func (p *parser) isOpen(typ itemType) bool {
@@ -86,22 +85,114 @@ func (p *parser) closeOthers(typ itemType) string {
 	return buffer.String()
 }
 
+var cantCrossLines = map[itemType]bool{
+	itemHeading1:      true,
+	itemHeading2:      true,
+	itemHeading3:      true,
+	itemHeading4:      true,
+	itemHeading5:      true,
+	itemHeading6:      true,
+	itemListUnordered: true,
+	itemListOrdered:   true,
+}
+
+// In many cases, everything can cross lines, and really doesn't matter.
+// what do we do with things that are allowed to cross lines... but have been popped. need to add back?
+func (p *parser) closeAtLineEnd() string {
+	var buffer bytes.Buffer
+	var addMeBack = make(map[itemType]int)
+
+	for p.openItemsStack.Len() > 0 {
+		t := p.openItemsStack.Pop()
+
+		if _, cantCross := cantCrossLines[t]; cantCross {
+			if val, ok := itemTokens[t]; ok {
+				buffer.WriteString(val[1])
+				p.openList[t]--
+				//		if t == typ {
+				//			break
+				//		} else {
+				//			// closed early
+				//			//				p.preClosedList[t]++ //Is this closed "early"?
+				//		}
+			}
+		} else {
+			addMeBack[t]++ //might we hit multiple of the same type, that are going to cross lines?
+		}
+
+	}
+	for k, _ := range addMeBack {
+		//a map isn't ordered, this could cause trouble.
+		p.openItemsStack.Push(k) //deal with multiple of same type? if yes, need to change away from map, as we'll need to maintain order
+
+	}
+
+	return buffer.String()
+}
+
+func (p *parser) closeAtDoubleLineBreak() string {
+	var buffer bytes.Buffer
+	var addMeBack = make(map[itemType]int)
+	for p.openItemsStack.Len() > 0 {
+		t := p.openItemsStack.Pop()
+		//close everything when we encounter two line breaks. e.g. ending a paragraph
+		if val, ok := itemTokens[t]; ok {
+			buffer.WriteString(val[1])
+			p.openList[t]--
+			//do we care about preClosed? I think no.
+			//p.preClosedList[t]++ //Is this closed "early"?
+		}
+
+	}
+	for k, _ := range addMeBack {
+		//a map isn't ordered, this could cause trouble.
+		p.openItemsStack.Push(k) //deal with multiple of same type? if yes, need to change away from map, as we'll need to maintain order
+
+	}
+
+	return buffer.String()
+}
+
+// collect gathers the emitted items into a slice.
+func (p *parser) collect(input string) (items []item) {
+	p.lex = lex("creole", input)
+	for {
+		item := p.lex.nextItem()
+		items = append(items, item)
+		if item.typ == itemEOF || item.typ == itemError {
+			break
+		}
+	}
+	return items
+}
+
 //maintain an open list.  send writeCloses()
 
 func (p *parser) Transform(input string) (output string, terror error) {
 	p.openList = make(map[itemType]int)
 	p.preClosedList = make(map[itemType]int)
+	p.input = input
 	var buffer bytes.Buffer
-	l := lex("creole", input)
-	fmt.Println(l)
-	// when we pre-close something, we will misinterpret the next token (which was a close but in the wrong order) as an open
-	//  so we need to keep a list of all items that have been preemptively closed.  so that we can ignore them.
-	//
+	p.lex = lex("creole", input)
+	p.items = p.items[:0]
 	p.openItemsStack = new(openItems)
+
+Done:
 	for {
-		item := l.nextItem()
-		fmt.Println("ITEM:::::", item)
+		item := p.lex.nextItem()
+		p.items = append(p.items, item)
+	ProcessNext:
 		switch item.typ {
+
+		case itemText:
+			if p.isParagraphStart(item) {
+				buffer.WriteString("<p>")
+				p.openItemsStack.Push(itemText)
+				p.openList[item.typ]++
+			}
+
+			buffer.WriteString(item.val)
+			break
 		case itemBold:
 			//**//test**// should be <strong><em>test</em></strong>
 			if p.wasPreClosed(itemBold) {
@@ -131,21 +222,65 @@ func (p *parser) Transform(input string) (output string, terror error) {
 				}
 			}
 			break
-		case itemNewLine:
-			// close anything that is open that can't cross lines... which is, i think, everything that can be open
-			// should we maintain two lists: one for inter line items (bold, italics, images, links) and a second for major items like open headers/lists
+		case itemHorizontalRule:
+			buffer.WriteString("<hr>")
 			break
-
+		case itemNewLine:
+			var newLineCount = 1
+			item, newLineCount = p.nextNonSpace(item, newLineCount)
+			if newLineCount > 1 {
+				buffer.WriteString(p.closeAtDoubleLineBreak())
+			}
+			goto ProcessNext
+			break
+		case itemEOF:
+			buffer.WriteString(p.closeAtDoubleLineBreak())
+			break Done
+		case itemError:
+			break Done
 		default:
 			buffer.WriteString(item.val)
 			break
 		}
-		fmt.Println(item)
-		if l.state == nil {
-			break
-		}
+		//		if p.lex.state == nil {
+		//			fmt.Println("state is nil")
+		//			break
+		//		}
 	}
 	return buffer.String(), nil
+}
+
+func (p *parser) isParagraphStart(current item) bool {
+	if current.typ == itemText {
+
+		if len(p.items) == 1 {
+			//at the start of the input.
+			return true
+		}
+		for i := len(p.items) - 1; i >= 0; i-- {
+			precedingItem := p.items[i]
+			if precedingItem.typ == itemNewLine {
+				return true
+			}
+			if precedingItem.typ != itemSpaceRun {
+				break
+			}
+		}
+	}
+	return false
+}
+
+func (p *parser) nextNonSpace(current item, currentBreakCount int) (token item, breakCount int) {
+	for {
+		current = p.lex.nextItem()
+		if current.typ != itemSpaceRun && current.typ != itemNewLine {
+			break
+		}
+		if current.typ == itemNewLine {
+			currentBreakCount++
+		}
+	}
+	return current, currentBreakCount
 }
 
 func (p *parser) processItem(item item) (string, error) {
