@@ -628,45 +628,28 @@ func lexHeading(l *lexer) stateFn {
 	headingCount := 0
 	//	fmt.Println("current", l.input[l.pos:l.pos+4])
 	//	fmt.Println("1", string(l.peek()))
+	isPrecededByWhiteSpaceOnly := isPrecededByWhitespace(l.pos)
+	isFollowedByWhiteSpaceOnly := isFollowedByWhiteSpace(l.input, l.pos)
 
-	for isHeading(l.peek()) {
-		//fmt.Println("heading -yes")
-		headingCount++
-		l.next()
-	}
-	if headingCount > 6 {
-		fmt.Println("headingCount")
-		//if more than six probably just return equalsSignRun (not a heading, but should be closed like one).
-		if isFollowedByWhiteSpace(l.input, l.pos) {
-			fmt.Println("this is an end of line heading, but has too many equals")
+	if isPrecededByWhiteSpaceOnly || isFollowedByWhiteSpaceOnly {
+		for isHeading(l.peek()) {
+			//fmt.Println("heading -yes")
+			headingCount++
+			l.next()
 		}
-		return lexText
+		if headingCount > 6 {
+			fmt.Println("headingCount")
+			//if more than six probably just return equalsSignRun (not a heading, but should be closed like one).
+			if isFollowedByWhiteSpaceOnly {
+				fmt.Println("this is an end of line heading, but has too many equals")
+				// lets emit something helpful here (e.g. closeHeaderRun)
+			}
+			return lexText
+		}
+		itemHeading := itemHeading1 - itemType(1) + itemType(headingCount)
+		l.emit(itemHeading)
+
 	}
-
-	//
-	//	//if followed by a space then it is definitely a heading (start probably) and if it ends w/ a newline that could be a closing
-	//	if !isSpace(l.peek()) && !isEndOfLine(l.peek()) {
-	//		//if !isEndOfLine(l.peek()) {
-	//		l.next()
-	//		return lexText
-	//
-	//		//	}
-	//		//	fmt.Println("no space, not a heading")
-	//	} else {
-	//		//	fmt.Println("hooray . . . . . . . .. . . .")
-	//	}
-	//
-	//IF WE WANT TO GET THE ENTIRE HEADING (making the lexer smarter than it probably should be, but more useful to)
-	//	l.pos += getHeadingEndPos(l.input, l.pos)
-	itemHeading := itemHeading1 - itemType(1) + itemType(headingCount)
-
-	//TODO: need to emit the paragraph end, but with no content, just start pos, paragraph end type, and empty.
-	//	if l.paragraphOpen {
-	//		l.emitManual(itemParagraphEnd, l.start, "")
-	//		l.paragraphOpen = false
-	//	}
-	l.emit(itemHeading)
-
 	return lexText
 }
 
