@@ -66,6 +66,7 @@ const (
 	itemHeading4
 	itemHeading5
 	itemHeading6
+	itemHeadingCloseRun
 	itemHorizontalRule
 	itemImage
 	itemImageLocationInternal
@@ -428,7 +429,6 @@ func lexWikiLineBreak(l *lexer) stateFn {
 
 func (l *lexer) isPrecededByWhitespace(startPos int) bool {
 	whitespaceOnly := false
-
 	i := startPos
 	//handle edge case in which we have just started lexing and we have text e.g. "test test ----"
 	if l.lastType == itemUnset {
@@ -628,27 +628,24 @@ func lexHeading(l *lexer) stateFn {
 	headingCount := 0
 	//	fmt.Println("current", l.input[l.pos:l.pos+4])
 	//	fmt.Println("1", string(l.peek()))
-	isPrecededByWhiteSpaceOnly := isPrecededByWhitespace(l.pos)
+
+	isPrecededByWhiteSpaceOnly := l.isPrecededByWhitespace(l.pos)
+
+	for isHeading(l.peek()) {
+		//fmt.Println("heading -yes")
+		headingCount++
+		l.next()
+
+	}
 	isFollowedByWhiteSpaceOnly := isFollowedByWhiteSpace(l.input, l.pos)
 
-	if isPrecededByWhiteSpaceOnly || isFollowedByWhiteSpaceOnly {
-		for isHeading(l.peek()) {
-			//fmt.Println("heading -yes")
-			headingCount++
-			l.next()
-		}
-		if headingCount > 6 {
-			fmt.Println("headingCount")
-			//if more than six probably just return equalsSignRun (not a heading, but should be closed like one).
-			if isFollowedByWhiteSpaceOnly {
-				fmt.Println("this is an end of line heading, but has too many equals")
-				// lets emit something helpful here (e.g. closeHeaderRun)
-			}
-			return lexText
-		}
+	if isFollowedByWhiteSpaceOnly {
+		l.emit(itemHeadingCloseRun)
+	} else if isPrecededByWhiteSpaceOnly && isSpace(l.peek()) {
 		itemHeading := itemHeading1 - itemType(1) + itemType(headingCount)
 		l.emit(itemHeading)
-
+	} else {
+		l.next()
 	}
 	return lexText
 }

@@ -243,6 +243,25 @@ Done:
 				}
 			}
 			break
+		case itemHeadingCloseRun:
+			//TODO: fix this, it is messy
+			var closeTag = ""
+			closeTag += p.closeOthers(itemHeading1)
+			closeTag += p.closeOthers(itemHeading2)
+			closeTag += p.closeOthers(itemHeading3)
+			closeTag += p.closeOthers(itemHeading4)
+			closeTag += p.closeOthers(itemHeading5)
+			closeTag += p.closeOthers(itemHeading6)
+
+			if closeTag != "" {
+				buffer.WriteString(closeTag)
+			} else {
+				//TODO: we aren't hitting this because something else could be open (e.g. a <p> tag or something)
+				// if close tag is empty or not a heading that was left open
+				fmt.Println(" NOTHING OPEN============ ", closeTag)
+				buffer.WriteString(item.val)
+			}
+			break
 		case itemHorizontalRule:
 			buffer.WriteString("<hr>")
 			break

@@ -172,14 +172,14 @@ var lexTests = []lexTest{
 	{"text with heading open and close", "== start heading==\n", []item{
 		{itemHeading2, 0, "=="},
 		{itemText, 0, " start heading"},
-		{itemHeading2, 0, "=="},
+		{itemHeadingCloseRun, 0, "=="},
 		tNewLine,
 		tEOF,
 	}},
 	{"text with heading open and close", "== start heading== \n", []item{
 		{itemHeading2, 0, "=="},
 		{itemText, 0, " start heading"},
-		{itemHeading2, 0, "=="},
+		{itemHeadingCloseRun, 0, "=="},
 		{itemText, 0, " "},
 		tNewLine,
 		tEOF,
