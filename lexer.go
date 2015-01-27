@@ -541,8 +541,12 @@ func lexAsterisk(l *lexer) stateFn {
 		asteriskCount++
 		l.next()
 	}
-
+	//could be a list item begin or a list item
+	// if first of a depth (only incrementally from previous length)
+	//  then we are starting a new (maybe embedded list)
 	if isSpace(l.peek()) && l.isPrecededByWhitespace(l.pos-asteriskCount) {
+
+		fmt.Println("list depth", l.listDepth)
 		if l.listDepth+1 == asteriskCount {
 			l.emit(itemListUnordered)
 			l.listDepth++

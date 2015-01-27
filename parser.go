@@ -3,6 +3,7 @@ package cajun
 import (
 	"bytes"
 	"fmt"
+	"strings"
 )
 
 var itemTokens = map[itemType][]string{
@@ -20,7 +21,7 @@ var itemTokens = map[itemType][]string{
 	itemItalics:        []string{"<em>", "</em>"},
 	itemLink:           []string{"<a href=\"{{location}}\">{{text}}</a>", ""},
 	itemLineBreak:      []string{"<br />", ""},
-	itemListUnordered:  []string{"<ul>", "</ul>"},
+	itemListUnordered:  []string{"<ul><li>", "</li></ul>"},
 	//itemListUnorderedItem: []string{"<li>", "</li>"},
 	itemListOrdered:     []string{"<ol>", "</ol>"},
 	itemTable:           []string{"<table>", "</table>"},
@@ -254,22 +255,48 @@ Done:
 			closeTag += p.closeOthers(itemHeading6)
 
 			if closeTag != "" {
+				if !strings.HasPrefix(closeTag, "</h") {
+					buffer.WriteString(item.val)
+				}
 				buffer.WriteString(closeTag)
 			} else {
 				//TODO: we aren't hitting this because something else could be open (e.g. a <p> tag or something)
 				// if close tag is empty or not a heading that was left open
-				fmt.Println(" NOTHING OPEN============ ", closeTag)
-				buffer.WriteString(item.val)
+				//	fmt.Println(" NOTHING OPEN============ ", closeTag)
 			}
+			break
+		case itemListUnordered, itemListOrdered:
+
+			var listLength = len(item.val)
+			fmt.Println("list length:", listLength)
+
+			//if p.isOpen(item.typ) == false {
+			if val, ok := itemTokens[item.typ]; ok {
+				buffer.WriteString(val[0])
+			} else {
+				fmt.Errorf("Can not find item token")
+			}
+			p.openItemsStack.Push(item.typ)
+			p.openList[item.typ]++
+			//} else {
+			//		buffer.WriteString(p.closeOthers(item.typ))
+			//	}
+
 			break
 		case itemHorizontalRule:
 			buffer.WriteString("<hr>")
+			break
+		case itemWikiLineBreak:
+			buffer.WriteString("<br />")
 			break
 		case itemNewLine:
 			var newLineCount = 1
 			item, newLineCount = p.nextNonSpace(item, newLineCount)
 			if newLineCount > 1 {
 				buffer.WriteString(p.closeAtDoubleLineBreak())
+			} else {
+				// only close the <li>
+				buffer.WriteString(p.closeOthers(itemListUnordered))
 			}
 			goto ProcessNext
 			break

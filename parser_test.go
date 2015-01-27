@@ -32,6 +32,9 @@ var parserTests = []parserTest{
 	{"text with bad order, twice", "hello-**//blah**//-world**//blah**// this is a **test**", "<p>hello-<strong><em>blah</em></strong>-world<strong><em>blah</em></strong> this is a <strong>test</strong></p>"},
 	{"text with bad order, twice", "hello-**//blah**//**//blah**//", "<p>hello-<strong><em>blah</em></strong><strong><em>blah</em></strong></p>"},
 	{"test closing bold accross line breaks", "close this ** testing a \n    \n bold... more stuff here", "<p>close this <strong> testing a </strong></p><p> bold... more stuff here</p>"},
+
+	{"line break", "line \\\\break", "<p>line <br />break</p>"},
+	{"unordered list", "* list item\n** child item", "<ul><li> list item</li><li> child item</li></ul>"},
 }
 
 func TestParser(t *testing.T) {
