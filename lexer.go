@@ -85,6 +85,9 @@ const (
 	itemLinkRightDelimiter
 	itemLineBreak
 	itemListUnordered
+	itemListUnorderedIncrease
+	itemListUnorderedDecrease
+	itemListUnorderedSameAsLast
 	itemListOrdered
 	itemTable
 	itemTableItem
@@ -536,20 +539,32 @@ func isAsterisk(r rune) bool {
 }
 
 func lexAsterisk(l *lexer) stateFn {
+
 	asteriskCount := 0
 	for isAsterisk(l.peek()) {
 		asteriskCount++
 		l.next()
 	}
+
 	//could be a list item begin or a list item
 	// if first of a depth (only incrementally from previous length)
 	//  then we are starting a new (maybe embedded list)
 	if isSpace(l.peek()) && l.isPrecededByWhitespace(l.pos-asteriskCount) {
-
-		fmt.Println("list depth", l.listDepth)
 		if l.listDepth+1 == asteriskCount {
+			fmt.Println("INCREASING")
+			//this is a new list start
+			l.emit(itemListUnorderedIncrease)
 			l.emit(itemListUnordered)
 			l.listDepth++
+			l.breakCount = 0
+		} else if l.listDepth == asteriskCount {
+			fmt.Println("SAME")
+			l.emit(itemListUnorderedSameAsLast)
+			l.breakCount = 0
+		} else if l.listDepth != 0 && l.listDepth >= asteriskCount {
+			fmt.Println("DECREASE")
+			l.listDepth--
+			l.emit(itemListUnorderedDecrease)
 			l.breakCount = 0
 		} else {
 			//here we have 2 or more asterisks, at the beginning of a line (perhaps w/ whitespace), but out of the blue...

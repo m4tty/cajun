@@ -80,7 +80,8 @@ var lexTests = []lexTest{
 		tEOF,
 	}},
 	{"text with asterisks", "* start unordered list\n", []item{
-		{itemListUnordered, 0, "*"},
+		{itemListUnorderedIncrease, 0, "*"},
+		{itemListUnordered, 0, ""},
 		{itemText, 0, " start unordered list"},
 		tNewLine,
 		tEOF,

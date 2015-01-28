@@ -7,21 +7,24 @@ import (
 )
 
 var itemTokens = map[itemType][]string{
-	itemBold:           []string{"<strong>", "</strong>"},
-	itemEOF:            []string{"</br>", ""},
-	itemFreeLink:       []string{"<a href=\"{{val}}\">{{val}}</a>", ""},
-	itemHeading1:       []string{"<h1>", "</h1>"},
-	itemHeading2:       []string{"<h2>", "</h2>"},
-	itemHeading3:       []string{"<h3>", "</h3>"},
-	itemHeading4:       []string{"<h4>", "</h4>"},
-	itemHeading5:       []string{"<h5>", "</h5>"},
-	itemHeading6:       []string{"<h6>", "</h6>"},
-	itemHorizontalRule: []string{"<hr>", ""},
-	itemImage:          []string{"<img src=\"{{location}}\" alt=\"{{text}}\" />", ""},
-	itemItalics:        []string{"<em>", "</em>"},
-	itemLink:           []string{"<a href=\"{{location}}\">{{text}}</a>", ""},
-	itemLineBreak:      []string{"<br />", ""},
-	itemListUnordered:  []string{"<ul><li>", "</li></ul>"},
+	itemBold:                    []string{"<strong>", "</strong>"},
+	itemEOF:                     []string{"</br>", ""},
+	itemFreeLink:                []string{"<a href=\"{{val}}\">{{val}}</a>", ""},
+	itemHeading1:                []string{"<h1>", "</h1>"},
+	itemHeading2:                []string{"<h2>", "</h2>"},
+	itemHeading3:                []string{"<h3>", "</h3>"},
+	itemHeading4:                []string{"<h4>", "</h4>"},
+	itemHeading5:                []string{"<h5>", "</h5>"},
+	itemHeading6:                []string{"<h6>", "</h6>"},
+	itemHorizontalRule:          []string{"<hr>", ""},
+	itemImage:                   []string{"<img src=\"{{location}}\" alt=\"{{text}}\" />", ""},
+	itemItalics:                 []string{"<em>", "</em>"},
+	itemLink:                    []string{"<a href=\"{{location}}\">{{text}}</a>", ""},
+	itemLineBreak:               []string{"<br />", ""},
+	itemListUnordered:           []string{"<li>", "</li>"},
+	itemListUnorderedIncrease:   []string{"<ul>", "</ul>"},
+	itemListUnorderedSameAsLast: []string{"<li>", "</li>"},
+	itemListUnorderedDecrease:   []string{"<li>", "</li>"},
 	//itemListUnorderedItem: []string{"<li>", "</li>"},
 	itemListOrdered:     []string{"<ol>", "</ol>"},
 	itemTable:           []string{"<table>", "</table>"},
@@ -45,6 +48,7 @@ type parser struct {
 	openItemsStack *openItems
 	items          []item
 	lex            *lexer
+	depth          int
 }
 
 func (p *parser) isOpen(typ itemType) bool {
@@ -72,20 +76,66 @@ func (p *parser) wasPreClosed(typ itemType) bool {
 
 func (p *parser) closeOthers(typ itemType) string {
 	var buffer bytes.Buffer
+	//var found = false
+
+	//var addMeBack = make(map[itemType]int)
 	for p.openItemsStack.Len() > 0 {
 		t := p.openItemsStack.Pop()
 		if val, ok := itemTokens[t]; ok {
 			buffer.WriteString(val[1])
 			p.openList[t]--
 			if t == typ {
+				//				found = true
 				break
 			} else {
+				//addMeBack[t]++
+				// closed early
+				p.preClosedList[t]++
+			}
+		}
+	}
+	//if we didn't find anything then we don't want to go closing everything
+	//	if !found {
+	//		for k, _ := range addMeBack {
+	//			//a map isn't ordered, this could cause trouble.
+	//			p.openItemsStack.Push(k) //deal with multiple of same type? if yes, need to change away from map, as we'll need to maintain order
+	//		}
+	//	}
+	return buffer.String()
+}
+
+func (p *parser) closeSpecific(typ itemType, limit int) string {
+	var buffer bytes.Buffer
+	var limitCount = 0
+	var addBacks openItems
+	fmt.Println("closing specific", limit)
+	for p.openItemsStack.Len() > 0 {
+		if limitCount == limit {
+			break
+		}
+		t := p.openItemsStack.Pop()
+		if val, ok := itemTokens[t]; ok {
+			if t == typ {
+				fmt.Println("closing", val[1])
+				buffer.WriteString(val[1])
+				limitCount++
+				p.openList[t]--
+			} else {
+				fmt.Println("no", val[1], t)
+				addBacks.Push(t)
 				// closed early
 				p.preClosedList[t]++
 			}
 		}
 
 	}
+	for addBacks.Len() > 0 {
+		val := addBacks.Pop()
+		p.openItemsStack.Push(val) //deal with multiple of same type? if yes, need to change away from map, as we'll need to maintain order
+		p.openList[val]++
+	}
+
+	fmt.Println("Len", p.openItemsStack.Len())
 	return buffer.String()
 }
 
@@ -265,23 +315,60 @@ Done:
 				//	fmt.Println(" NOTHING OPEN============ ", closeTag)
 			}
 			break
-		case itemListUnordered, itemListOrdered:
+		case itemListUnordered, itemListUnorderedIncrease, itemListUnorderedSameAsLast, itemListUnorderedDecrease, itemListOrdered:
 
 			var listLength = len(item.val)
-			fmt.Println("list length:", listLength)
+			if item.typ == itemListUnorderedSameAsLast {
+				fmt.Println("LEN-1", p.openItemsStack.Len())
 
+				buffer.WriteString(p.closeSpecific(itemListUnorderedSameAsLast, 1))
+				//</li><li>
+				//we must close things... but only closing the diff between the last list length
+				//fmt.Println("itemSame", closeUnordered)
+				//buffer.WriteString(closeUnordered)
+				buffer.WriteString(p.closeSpecific(itemListUnordered, 1))
+
+				buffer.WriteString(p.closeSpecific(itemListUnorderedDecrease, 1))
+
+			}
+			if item.typ == itemListUnorderedDecrease {
+				//</li>
+				fmt.Println("LEN-2", p.openItemsStack.Len())
+				//buffer.WriteString(p.closeSpecific(itemListUnorderedDecrease, (p.depth - listLength)))
+				closing := p.closeOthers(itemListUnorderedIncrease)
+				fmt.Println("itemDec", closing)
+				//buffer.WriteString(p.closeOthers(itemListUnordered))
+				//buffer.WriteString(p.closeOthers(itemListUnorderedSameAsLast))
+				buffer.WriteString(closing)
+				//this is hacky
+
+				closingUnordered := p.closeSpecific(itemListUnordered, 1)
+				fmt.Println("itemDec-", closingUnordered)
+				buffer.WriteString(closingUnordered)
+				//buffer.WriteString(p.closeSpecific(itemListUnorderedIncrease, (p.depth - listLength)))
+				//buffer.WriteString(p.closeSpecific(itemListUnorderedSameAsLast, (p.depth - listLength)))
+				//buffer.WriteString(p.closeSpecific(itemListUnorderedDecrease, (p.depth - listLength)))
+			}
+			if item.typ == itemListUnorderedIncrease {
+
+				fmt.Println("LEN-3", p.openItemsStack.Len())
+				fmt.Println("itemInc")
+				//buffer.WriteString(p.closeOthers(itemListUnordered))
+				//buffer.WriteString(p.closeSpecific(itemListUnorderedSameAsLast, (p.depth - listLength)))
+			}
 			//if p.isOpen(item.typ) == false {
 			if val, ok := itemTokens[item.typ]; ok {
 				buffer.WriteString(val[0])
+				p.openItemsStack.Push(item.typ)
+				p.openList[item.typ]++
 			} else {
 				fmt.Errorf("Can not find item token")
 			}
-			p.openItemsStack.Push(item.typ)
-			p.openList[item.typ]++
 			//} else {
 			//		buffer.WriteString(p.closeOthers(item.typ))
 			//	}
 
+			p.depth = listLength //set to current depth
 			break
 		case itemHorizontalRule:
 			buffer.WriteString("<hr>")
@@ -296,7 +383,7 @@ Done:
 				buffer.WriteString(p.closeAtDoubleLineBreak())
 			} else {
 				// only close the <li>
-				buffer.WriteString(p.closeOthers(itemListUnordered))
+				//buffer.WriteString(p.closeOthers(itemListUnordered))
 			}
 			goto ProcessNext
 			break
