@@ -34,10 +34,13 @@ var parserTests = []parserTest{
 	{"test closing bold accross line breaks", "close this ** testing a \n    \n bold... more stuff here", "<p>close this <strong> testing a </strong></p><p> bold... more stuff here</p>"},
 
 	{"line break", "line \\\\break", "<p>line <br />break</p>"},
-	{"unordered list", "* list item\n** child item", "<ul><li> list item<ul><li> child item</li></ul></li></ul>"},
-	{"unordered list -", "* list item\n** child item\n* list item", "<ul><li> list item<ul><li> child item</li></ul></li><li> list item</li></ul>"},
-	{"unordered list -", "* item1\n** item1.1\n** item1.2\n* item2", "<ul><li> item1<ul><li> item1.1</li><li> item1.2</li></ul></li><li> item2</li></ul>"},
-	{"unordered list -", "* item1\n** item1.1\n** item1.2\n* item2\n* item3", "<ul><li> item1<ul><li> item1.1</li><li> item1.2</li></ul></li><li> item2</li><li> item3</li></ul>"},
+	{"unordered list simple", "* list item\n** child item", "<ul><li> list item<ul><li> child item</li></ul></li></ul>"},
+	{"unordered list - one child, in first parent", "* list item\n** child item\n* list item", "<ul><li> list item<ul><li> child item</li></ul></li><li> list item</li></ul>"},
+	{"unordered list - two child in first parent", "* item1\n** item1.1\n** item1.2\n* item2", "<ul><li> item1<ul><li> item1.1</li><li> item1.2</li></ul></li><li> item2</li></ul>"},
+	{"unordered list - 3 first level, 2 child", "* item1\n** item1.1\n** item1.2\n* item2\n* item3", "<ul><li> item1<ul><li> item1.1</li><li> item1.2</li></ul></li><li> item2</li><li> item3</li></ul>"},
+	{"unordered list, ", "* item1\n** item1.1\n** item1.2", "<ul><li> item1<ul><li> item1.1</li><li> item1.2</li></ul></li></ul>"},
+	{"unordered list, ", "* item1\n** item1.1\n** item1.2\n** item1.3", "<ul><li> item1<ul><li> item1.1</li><li> item1.2</li><li> item1.3</li></ul></li></ul>"},
+	//	{"unordered list - ", "* item1\n** item1.1\n** item1.2\n* item2\n** item2.1\n** item2.2\n*** item2.2.1", "<ul><li> item1<ul><li> item1.1</li><li> item1.2</li></ul></li><li> item2 <ul><li> item2.1</li><li> item2.2<ul><li> item2.2.1</li></ul></li></ul></li></ul>"},
 }
 
 func TestParser(t *testing.T) {
