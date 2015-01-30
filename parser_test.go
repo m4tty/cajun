@@ -40,9 +40,24 @@ var parserTests = []parserTest{
 	{"unordered list - 3 first level, 2 child", "* item1\n** item1.1\n** item1.2\n* item2\n* item3", "<ul><li> item1<ul><li> item1.1</li><li> item1.2</li></ul></li><li> item2</li><li> item3</li></ul>"},
 	{"unordered list, ", "* item1\n** item1.1\n** item1.2", "<ul><li> item1<ul><li> item1.1</li><li> item1.2</li></ul></li></ul>"},
 	{"3 children", "* item1\n** item1.1\n** item1.2\n** item1.3", "<ul><li> item1<ul><li> item1.1</li><li> item1.2</li><li> item1.3</li></ul></li></ul>"},
-	//	{"unordered list - ", "* item1\n** item1.1\n** item1.2\n* item2\n** item2.1\n** item2.2\n*** item2.2.1", "<ul><li> item1<ul><li> item1.1</li><li> item1.2</li></ul></li><li> item2 <ul><li> item2.1</li><li> item2.2<ul><li> item2.2.1</li></ul></li></ul></li></ul>"},
+	{"unordered list - long", "* item1\n** item1.1\n** item1.2\n* item2 \n** item2.1\n** item2.2\n*** item2.2.1", "<ul><li> item1<ul><li> item1.1</li><li> item1.2</li></ul></li><li> item2 <ul><li> item2.1</li><li> item2.2<ul><li> item2.2.1</li></ul></li></ul></li></ul>"},
 	{"5 levels", "* 1\n** 2\n*** 3\n**** 4\n***** 5", "<ul><li> 1<ul><li> 2<ul><li> 3<ul><li> 4<ul><li> 5</li></ul></li></ul></li></ul></li></ul></li></ul>"},
 	{"multiline list items", "* 1\n test\n* 2\n test", "<ul><li> 1 test</li><li> 2 test</li></ul>"},
+
+	{"ordered list simple", "# list item\n## child item", "<ol><li> list item<ol><li> child item</li></ol></li></ol>"},
+	{"ordered list - one child, in first parent", "# list item\n## child item\n# list item", "<ol><li> list item<ol><li> child item</li></ol></li><li> list item</li></ol>"},
+	{"ordered list - two child in first parent", "# item1\n## item1.1\n## item1.2\n# item2", "<ol><li> item1<ol><li> item1.1</li><li> item1.2</li></ol></li><li> item2</li></ol>"},
+	{"ordered list - 3 first level, 2 child", "# item1\n## item1.1\n## item1.2\n# item2\n# item3", "<ol><li> item1<ol><li> item1.1</li><li> item1.2</li></ol></li><li> item2</li><li> item3</li></ol>"},
+	{"ordered list, ", "# item1\n## item1.1\n## item1.2", "<ol><li> item1<ol><li> item1.1</li><li> item1.2</li></ol></li></ol>"},
+	{"ordered 3 children", "# item1\n## item1.1\n## item1.2\n## item1.3", "<ol><li> item1<ol><li> item1.1</li><li> item1.2</li><li> item1.3</li></ol></li></ol>"},
+	{"ordered list - long", "# item1\n## item1.1\n## item1.2\n# item2 \n## item2.1\n## item2.2\n### item2.2.1", "<ol><li> item1<ol><li> item1.1</li><li> item1.2</li></ol></li><li> item2 <ol><li> item2.1</li><li> item2.2<ol><li> item2.2.1</li></ol></li></ol></li></ol>"},
+	{"ordered 5 levels", "# 1\n## 2\n### 3\n#### 4\n##### 5", "<ol><li> 1<ol><li> 2<ol><li> 3<ol><li> 4<ol><li> 5</li></ol></li></ol></li></ol></li></ol></li></ol>"},
+	{"multiline ordered list items", "# 1\n test\n# 2\n test", "<ol><li> 1 test</li><li> 2 test</li></ol>"},
+	{"image simple", "{{Red-Flower.jpg|here is a red flower}}", "<img src=\"Red-Flower.jpg\" alt=\"here is a red flower\" />"},
+	{"image simple no alt", "{{Red-Flower.jpg}}", "<img src=\"Red-Flower.jpg\" alt=\"\" />"},
+	{"link simple", "[[http://www.wikicreole.org|external links]]", "<a href=\"http://www.wikicreole.org\" />external links</a>"},
+	{"link simple", "[[http://www.wikicreole.org]]", "<a href=\"http://www.wikicreole.org\" />http://www.wikicreole.org</a>"},
+	{"free link simple", "this text has a link http://www.wikicreole.org to wiki creole", "<p>this text has a link <a href=\"http://www.wikicreole.org\" />http://www.wikicreole.org</a> to wiki creole</p>"},
 }
 
 func TestParser(t *testing.T) {

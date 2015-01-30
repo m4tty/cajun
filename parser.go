@@ -18,6 +18,10 @@ var itemTokens = map[itemType][]string{
 	itemHeading6:                []string{"<h6>", "</h6>"},
 	itemHorizontalRule:          []string{"<hr>", ""},
 	itemImage:                   []string{"<img src=\"{{location}}\" alt=\"{{text}}\" />", ""},
+	itemImageLeftDelimiter:      []string{"<img", ""},
+	itemImageLocation:           []string{"src=\"", "\""},
+	itemImageText:               []string{"alt=\"", "\""},
+	itemImageRightDelimiter:     []string{"/>", ""},
 	itemItalics:                 []string{"<em>", "</em>"},
 	itemLink:                    []string{"<a href=\"{{location}}\">{{text}}</a>", ""},
 	itemLineBreak:               []string{"<br />", ""},
@@ -25,14 +29,16 @@ var itemTokens = map[itemType][]string{
 	itemListUnorderedIncrease:   []string{"<ul>", "</ul>"},
 	itemListUnorderedSameAsLast: []string{"<li>", "</li>"},
 	itemListUnorderedDecrease:   []string{"<li>", "</li>"},
-	//itemListUnorderedItem: []string{"<li>", "</li>"},
-	itemListOrdered:     []string{"<ol>", "</ol>"},
-	itemTable:           []string{"<table>", "</table>"},
-	itemTableRow:        []string{"<tr>", "</tr>"},
-	itemTableHeaderItem: []string{"<th>", "</th>"},
-	itemText:            []string{"<p>", "</p>"},
-	itemTableItem:       []string{"<td>", "</td>"},
-	itemNewLine:         []string{"</br>", ""},
+	itemListOrdered:             []string{"<li>", "</li>"},
+	itemListOrderedIncrease:     []string{"<ol>", "</ol>"},
+	itemListOrderedSameAsLast:   []string{"<li>", "</li>"},
+	itemListOrderedDecrease:     []string{"<li>", "</li>"},
+	itemTable:                   []string{"<table>", "</table>"},
+	itemTableRow:                []string{"<tr>", "</tr>"},
+	itemTableHeaderItem:         []string{"<th>", "</th>"},
+	itemText:                    []string{"<p>", "</p>"},
+	itemTableItem:               []string{"<td>", "</td>"},
+	itemNewLine:                 []string{"</br>", ""},
 	//itemParagraph:       []string{"<p>", "</p>"},
 	itemSpaceRun:      []string{"", ""},
 	itemNoWiki:        []string{"<pre>", "</pre>"},
@@ -314,8 +320,7 @@ Done:
 				//	fmt.Println(" NOTHING OPEN============ ", closeTag)
 			}
 			break
-		case itemListUnordered, itemListUnorderedIncrease, itemListUnorderedSameAsLast, itemListUnorderedDecrease, itemListOrdered:
-			//TODO: refactor/cleanup. emitting list items in this overloaded fashion causes trouble. e.g. 3 things can cause a close </li>
+		case itemListUnordered, itemListUnorderedIncrease, itemListUnorderedSameAsLast, itemListUnorderedDecrease:
 			var listLength = len(item.val)
 			if item.typ == itemListUnorderedSameAsLast {
 				var closed = false
@@ -370,6 +375,58 @@ Done:
 
 			p.depth = listLength //set to current depth
 			break
+
+		case itemListOrdered, itemListOrderedIncrease, itemListOrderedSameAsLast, itemListOrderedDecrease:
+			var listLength = len(item.val)
+			if item.typ == itemListOrderedSameAsLast {
+				var closed = false
+				closeSame := p.closeSpecific(itemListOrderedSameAsLast, 1)
+				if closeSame != "" {
+					buffer.WriteString(closeSame)
+					closed = true
+				}
+				if !closed {
+					closeItem := p.closeSpecific(itemListOrdered, 1)
+					if closeItem != "" {
+						buffer.WriteString(closeItem)
+						closed = true
+					}
+				}
+				if !closed {
+					closeDecrease := p.closeSpecific(itemListOrderedDecrease, 1)
+					buffer.WriteString(closeDecrease)
+				}
+			}
+			if item.typ == itemListOrderedDecrease {
+				closing := p.closeOthers(itemListOrderedIncrease)
+				buffer.WriteString(closing)
+
+				closingOrdered := p.closeSpecific(itemListOrdered, 1)
+				buffer.WriteString(closingOrdered)
+			}
+			if item.typ == itemListOrderedIncrease {
+			}
+			if val, ok := itemTokens[item.typ]; ok {
+				buffer.WriteString(val[0])
+				p.openItemsStack.Push(item.typ)
+				p.openList[item.typ]++
+			} else {
+				fmt.Errorf("Can not find item token")
+			}
+			p.depth = listLength //set to current depth
+			break
+		case itemImage:
+			imageHtml := p.translateWikiImageToHtml(item.val)
+			buffer.WriteString(imageHtml)
+			break
+		case itemLink:
+			linkHtml := p.translateWikiLinkToHtml(item.val)
+			buffer.WriteString(linkHtml)
+			break
+		case itemFreeLink:
+			linkHtml := p.makeHtmlLink(item.val, item.val)
+			buffer.WriteString(linkHtml)
+			break
 		case itemHorizontalRule:
 			buffer.WriteString("<hr>")
 			break
@@ -405,8 +462,36 @@ Done:
 	return buffer.String(), nil
 }
 
-//TODO: is needed?
+//given this {{src|alt}}
+//returns this <img src="src" alt="alt" />
+func (p *parser) translateWikiImageToHtml(wikiImage string) string {
+	wikiImage = strings.TrimPrefix(wikiImage, "{{")
+	wikiImage = strings.TrimSuffix(wikiImage, "}}")
+	var imageParts = strings.Split(wikiImage, "|")
+	var alt = ""
+	if len(imageParts) == 2 {
+		alt = imageParts[1]
+	}
+	return "<img src=\"" + imageParts[0] + "\" alt=\"" + alt + "\" />"
+}
 
+//given this [[href|text]]
+//returns this <a href="href"/>text</a>
+func (p *parser) translateWikiLinkToHtml(wikiLink string) string {
+	wikiLink = strings.TrimPrefix(wikiLink, "[[")
+	wikiLink = strings.TrimSuffix(wikiLink, "]]")
+	var linkParts = strings.Split(wikiLink, "|")
+	var text = linkParts[0]
+	if len(linkParts) == 2 {
+		text = linkParts[1]
+	}
+	return p.makeHtmlLink(linkParts[0], text)
+}
+
+func (p *parser) makeHtmlLink(href string, text string) string {
+
+	return "<a href=\"" + href + "\" />" + text + "</a>"
+}
 func (p *parser) isParagraphStart(current item) bool {
 
 	if current.typ == itemText {

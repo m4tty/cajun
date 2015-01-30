@@ -27,7 +27,6 @@ type lexer struct {
 	pos          int
 	width        int
 	items        chan item
-	delimiters   map[string]*Delimiter
 	lastType     itemType
 	lastLastType itemType
 	listDepth    int
@@ -89,6 +88,9 @@ const (
 	itemListUnorderedDecrease
 	itemListUnorderedSameAsLast
 	itemListOrdered
+	itemListOrderedIncrease
+	itemListOrderedDecrease
+	itemListOrderedSameAsLast
 	itemTable
 	itemTableItem
 	itemTableRow
@@ -97,6 +99,9 @@ const (
 	itemNewLine
 	itemSpaceRun
 	itemNoWiki
+	itemNoWikiClose
+	itemNoWikiOpen
+	itemNoWikiText
 	itemWikiLineBreak
 )
 
@@ -106,31 +111,13 @@ const (
 // Option: the above might be "AutoClose" behavior
 func lex(name, input string) *lexer {
 	l := &lexer{
-		name:       name,
-		input:      input,
-		state:      lexText,
-		items:      make(chan item, 2),
-		delimiters: make(map[string]*Delimiter),
+		name:  name,
+		input: input,
+		state: lexText,
+		items: make(chan item, 2),
 	}
 	//go l.run()
 	return l
-
-}
-
-type Delimiter struct {
-	name  string
-	delim string
-	lexFn stateFn
-}
-
-func (l *lexer) addDelimiter(name string, delim string, lexFn stateFn) {
-	_, ok := l.delimiters[name]
-	if !ok {
-		fmt.Println("A delimiter of that name already exists", delim)
-		return
-	}
-	//	var delimiter = Delimiter{left: left, right: right}
-	l.delimiters[name] = &Delimiter{name: name, delim: delim, lexFn: lexFn}
 
 }
 func (l *lexer) nextItem() item {
@@ -183,12 +170,17 @@ func lexText(l *lexer) stateFn {
 		}
 		if strings.HasPrefix(l.input[l.pos:], "[[") {
 			//l.emitAnyPreviousText()
-			return lexInsideLink
+			return lexLink
+		}
+
+		if strings.HasPrefix(l.input[l.pos:], "{{{") {
+			//l.emitAnyPreviousText()
+			return lexInsideNoWiki
 		}
 
 		if strings.HasPrefix(l.input[l.pos:], "{{") {
 			//l.emitAnyPreviousText()
-			return lexInsideImage
+			return lexImage
 		}
 		if strings.HasPrefix(l.input[l.pos:], "http://") {
 			l.emitAnyPreviousText()
@@ -243,7 +235,7 @@ func (l *lexer) errorf(format string, args ...interface{}) stateFn {
 
 func lexLinkLocation(l *lexer) stateFn {
 
-	length := getLinkLength(l.input, l.pos, "]]")
+	length := getTextLength(l.input, l.pos, "]]")
 	linkParts := strings.Split(l.input[l.pos:l.pos+length], "|")
 
 	linkLocation := linkParts[0]
@@ -277,7 +269,7 @@ func lexLinkInnerDelimiter(l *lexer) stateFn {
 }
 func lexLinkText(l *lexer) stateFn {
 
-	length := getLinkLength(l.input, l.pos, "]]")
+	length := getTextLength(l.input, l.pos, "]]")
 	l.width = length
 	l.pos += l.width
 
@@ -314,8 +306,8 @@ func lexInsideLink(l *lexer) stateFn {
 }
 
 func lexImageLocation(l *lexer) stateFn {
-
-	length := getLinkLength(l.input, l.pos, "}}")
+	//TODO: internal image location?
+	length := getTextLength(l.input, l.pos, "}}")
 	imageParts := strings.Split(l.input[l.pos:l.pos+length], "|")
 	imageLocation := imageParts[0]
 	imageLocationLength := len(imageLocation)
@@ -328,20 +320,36 @@ func lexImageLocation(l *lexer) stateFn {
 	}
 	return lexInsideImage
 }
-
+func lexImageText(l *lexer) stateFn {
+	length := getTextLength(l.input, l.pos, "}}")
+	l.width = length
+	l.pos += l.width
+	l.emit(itemImageText)
+	return lexInsideImage
+}
 func lexImageInnerDelimiter(l *lexer) stateFn {
 	l.width = len("|")
 	l.pos += l.width
-	l.emit(itemImageDelimiter) //TODO: reintroduce if needed
+	l.emit(itemImageDelimiter)
 	return lexInsideImage
 }
-func lexImageText(l *lexer) stateFn {
-	length := getLinkLength(l.input, l.pos, "}}")
-	l.width = length
-	l.pos += l.width
-	l.emit(itemImageText) //TODO: reintroduce if needed
-	return lexInsideImage
+
+func lexImage(l *lexer) stateFn {
+
+	closed := isExplicitClose(l.input, l.pos, "}}")
+	if closed {
+		l.emitAnyPreviousText()
+		length := getTextLength(l.input, l.pos, "}}")
+		l.width = length + 2
+		l.pos += l.width
+		l.emit(itemImage)
+	} else {
+		//support implicit close (i.e. close at new line)
+		l.next()
+	}
+	return lexText
 }
+
 func lexInsideImage(l *lexer) stateFn {
 
 	closed := isExplicitClose(l.input, l.pos, "}}")
@@ -370,18 +378,11 @@ func lexInsideImage(l *lexer) stateFn {
 	}
 	return lexText
 }
+
 func lexImageLeft(l *lexer) stateFn {
 
 	l.pos += len("{{")
 
-	//	rightLink := "]]"
-	//	i := strings.Index(l.input[l.pos:], rightLink)
-	//	if i < 0 {
-	//		return l.errorf("unclosed link")
-	//	}
-	//	l.pos += len(rightLink) + i
-	//	fmt.Println("link pos", l.pos)
-	//	fmt.Println("link start", l.start)
 	l.emit(itemImageLeftDelimiter)
 	return lexInsideImage
 
@@ -389,6 +390,50 @@ func lexImageLeft(l *lexer) stateFn {
 func lexImageRight(l *lexer) stateFn {
 	l.pos += len("}}")
 	l.emit(itemImageRightDelimiter)
+	return lexText
+}
+
+func lexNoWikiText(l *lexer) stateFn {
+
+	length := getTextLength(l.input, l.pos, "}}}")
+	l.width = length
+	l.pos += l.width
+	l.emit(itemNoWikiText)
+	return lexInsideNoWiki
+}
+
+func lexInsideNoWiki(l *lexer) stateFn {
+
+	closed := isExplicitCloseMultiline(l.input, l.pos, "}}}")
+	if closed {
+		l.emitAnyPreviousText()
+
+		if strings.HasPrefix(l.input[l.pos:], "{{{") {
+			return lexNoWikiLeft
+		}
+		if strings.HasPrefix(l.input[l.pos:], "}}}") {
+			return lexNoWikiRight
+		}
+		if l.lastType == itemNoWikiOpen {
+			return lexNoWikiText
+		}
+	} else {
+		//support implicit close (i.e. close at new line)
+		l.next()
+	}
+	return lexText
+}
+func lexNoWikiLeft(l *lexer) stateFn {
+
+	l.pos += len("{{{")
+
+	l.emit(itemNoWikiOpen)
+	return lexInsideNoWiki
+
+}
+func lexNoWikiRight(l *lexer) stateFn {
+	l.pos += len("}}}")
+	l.emit(itemNoWikiClose)
 	return lexText
 }
 func lexNewLine(l *lexer) stateFn {
@@ -498,6 +543,22 @@ func lexItalics(l *lexer) stateFn {
 	//l.parenDepth = 0
 	return lexText
 }
+
+func lexLink(l *lexer) stateFn {
+	closed := isExplicitClose(l.input, l.pos, "]]")
+	if closed {
+		l.emitAnyPreviousText()
+		length := getTextLength(l.input, l.pos, "]]")
+		l.width = length + 2
+		l.pos += l.width
+		l.emit(itemLink)
+	} else {
+		//support implicit close (i.e. close at new line)
+		l.next()
+	}
+	return lexText
+}
+
 func lexLinkLeft(l *lexer) stateFn {
 
 	l.pos += len("[[")
@@ -526,7 +587,22 @@ func lexOrderedList(l *lexer) stateFn {
 		l.next()
 	}
 	if isSpace(l.peek()) && l.isPrecededByWhitespace(l.pos-poundCount) {
-		l.emit(itemListOrdered)
+		if l.listDepth+1 == poundCount {
+			//this is a new list start
+			l.emit(itemListOrderedIncrease)
+			l.emit(itemListOrdered)
+			l.listDepth++
+			l.breakCount = 0
+		} else if l.listDepth == poundCount {
+			l.emit(itemListOrderedSameAsLast)
+			l.breakCount = 0
+		} else if l.listDepth != 0 && l.listDepth >= poundCount {
+			l.listDepth--
+			l.emit(itemListOrderedDecrease)
+			l.breakCount = 0
+		} else {
+			l.next()
+		}
 	}
 	return lexText
 }
@@ -674,13 +750,21 @@ func getHeadingLength(input string, currentPos int) int {
 	}
 }
 
-func getLinkLength(input string, currentPos int, closeChars string) int {
+func getTextLength(input string, currentPos int, closeChars string) int {
 	i := strings.Index(input[currentPos:], closeChars)
 	if i >= 0 {
 		return i
 	} else {
 		return len(input)
 	}
+}
+
+func isExplicitCloseMultiline(input string, currentPos int, closeDelim string) bool {
+	i := strings.Index(input[currentPos:], closeDelim)
+	if i == -1 {
+		return false
+	}
+	return true
 }
 func isExplicitClose(input string, currentPos int, closeDelim string) bool {
 	x := strings.IndexAny(input[currentPos:], "\n\r")
