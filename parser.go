@@ -108,7 +108,6 @@ func (p *parser) closeSpecific(typ itemType, limit int) string {
 	var buffer bytes.Buffer
 	var limitCount = 0
 	var addBacks openItems
-	fmt.Println("closing specific", limit)
 	for p.openItemsStack.Len() > 0 {
 		if limitCount == limit {
 			break
@@ -116,12 +115,10 @@ func (p *parser) closeSpecific(typ itemType, limit int) string {
 		t := p.openItemsStack.Pop()
 		if val, ok := itemTokens[t]; ok {
 			if t == typ {
-				fmt.Println("closing", val[1])
 				buffer.WriteString(val[1])
 				limitCount++
 				p.openList[t]--
 			} else {
-				fmt.Println("no", val[1], t)
 				addBacks.Push(t)
 				// closed early
 				p.preClosedList[t]++
@@ -135,7 +132,6 @@ func (p *parser) closeSpecific(typ itemType, limit int) string {
 		p.openList[val]++
 	}
 
-	fmt.Println("Len", p.openItemsStack.Len())
 	return buffer.String()
 }
 
@@ -235,11 +231,14 @@ Done:
 	for {
 		item := p.lex.nextItem()
 		p.items = append(p.items, item)
-	ProcessNext:
 		switch item.typ {
 
 		case itemText:
 			if p.isParagraphStart(item) {
+
+				//close stuff, if needed.
+				buffer.WriteString(p.closeAtDoubleLineBreak())
+
 				buffer.WriteString("<p>")
 				p.openItemsStack.Push(itemText)
 				p.openList[item.typ]++
@@ -316,34 +315,37 @@ Done:
 			}
 			break
 		case itemListUnordered, itemListUnorderedIncrease, itemListUnorderedSameAsLast, itemListUnorderedDecrease, itemListOrdered:
-
+			//TODO: refactor/cleanup. emitting list items in this overloaded fashion causes trouble. e.g. 3 things can cause a close </li>
 			var listLength = len(item.val)
 			if item.typ == itemListUnorderedSameAsLast {
-				fmt.Println("LEN-1", p.openItemsStack.Len())
-
-				buffer.WriteString(p.closeSpecific(itemListUnorderedSameAsLast, 1))
-				//</li><li>
-				//we must close things... but only closing the diff between the last list length
-				//fmt.Println("itemSame", closeUnordered)
-				//buffer.WriteString(closeUnordered)
-				buffer.WriteString(p.closeSpecific(itemListUnordered, 1))
-
-				buffer.WriteString(p.closeSpecific(itemListUnorderedDecrease, 1))
-
+				var closed = false
+				closeSame := p.closeSpecific(itemListUnorderedSameAsLast, 1)
+				if closeSame != "" {
+					buffer.WriteString(closeSame)
+					closed = true
+				}
+				if !closed {
+					closeItem := p.closeSpecific(itemListUnordered, 1)
+					if closeItem != "" {
+						buffer.WriteString(closeItem)
+						closed = true
+					}
+				}
+				if !closed {
+					closeDecrease := p.closeSpecific(itemListUnorderedDecrease, 1)
+					buffer.WriteString(closeDecrease)
+				}
 			}
 			if item.typ == itemListUnorderedDecrease {
 				//</li>
-				fmt.Println("LEN-2", p.openItemsStack.Len())
 				//buffer.WriteString(p.closeSpecific(itemListUnorderedDecrease, (p.depth - listLength)))
 				closing := p.closeOthers(itemListUnorderedIncrease)
-				fmt.Println("itemDec", closing)
 				//buffer.WriteString(p.closeOthers(itemListUnordered))
 				//buffer.WriteString(p.closeOthers(itemListUnorderedSameAsLast))
 				buffer.WriteString(closing)
 				//this is hacky
 
 				closingUnordered := p.closeSpecific(itemListUnordered, 1)
-				fmt.Println("itemDec-", closingUnordered)
 				buffer.WriteString(closingUnordered)
 				//buffer.WriteString(p.closeSpecific(itemListUnorderedIncrease, (p.depth - listLength)))
 				//buffer.WriteString(p.closeSpecific(itemListUnorderedSameAsLast, (p.depth - listLength)))
@@ -351,8 +353,6 @@ Done:
 			}
 			if item.typ == itemListUnorderedIncrease {
 
-				fmt.Println("LEN-3", p.openItemsStack.Len())
-				fmt.Println("itemInc")
 				//buffer.WriteString(p.closeOthers(itemListUnordered))
 				//buffer.WriteString(p.closeSpecific(itemListUnorderedSameAsLast, (p.depth - listLength)))
 			}
@@ -377,15 +377,16 @@ Done:
 			buffer.WriteString("<br />")
 			break
 		case itemNewLine:
-			var newLineCount = 1
-			item, newLineCount = p.nextNonSpace(item, newLineCount)
-			if newLineCount > 1 {
-				buffer.WriteString(p.closeAtDoubleLineBreak())
-			} else {
-				// only close the <li>
-				//buffer.WriteString(p.closeOthers(itemListUnordered))
-			}
-			goto ProcessNext
+			//TODO: anything here?
+			//var newLineCount = 1
+			//item, newLineCount = p.nextNonSpace(item, newLineCount)
+			//if newLineCount > 1 {
+			//		buffer.WriteString(p.closeAtDoubleLineBreak())
+			//	} else {
+			// only close the <li>
+			//buffer.WriteString(p.closeOthers(itemListUnordered))
+			//	}
+			//goto ProcessNext
 			break
 		case itemEOF:
 			buffer.WriteString(p.closeAtDoubleLineBreak())
@@ -404,17 +405,25 @@ Done:
 	return buffer.String(), nil
 }
 
-func (p *parser) isParagraphStart(current item) bool {
-	if current.typ == itemText {
+//TODO: is needed?
 
+func (p *parser) isParagraphStart(current item) bool {
+
+	if current.typ == itemText {
 		if len(p.items) == 1 {
 			//at the start of the input.
 			return true
 		}
-		for i := len(p.items) - 1; i >= 0; i-- {
+		newLineCount := 0
+		for i := len(p.items) - 2; i >= 0; i-- {
 			precedingItem := p.items[i]
+
 			if precedingItem.typ == itemNewLine {
-				return true
+				newLineCount++
+				if newLineCount > 1 {
+					return true
+				}
+				continue
 			}
 			if precedingItem.typ != itemSpaceRun {
 				break

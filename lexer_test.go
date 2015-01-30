@@ -55,6 +55,7 @@ var (
 var lexTests = []lexTest{
 	{"empty", "", []item{tEOF}},
 	{"spaces", " \t\n", []item{{itemSpaceRun, 0, " \t"}, tNewLine, tEOF}},
+	{"new lines", "\n\n\n\n", []item{tNewLine, tNewLine, tNewLine, tNewLine, tEOF}},
 	{"text", `now is the time`, []item{{itemText, 0, "now is the time"}, tEOF}},
 	{"text with link", "hello-[[blah]]-world", []item{
 		{itemText, 0, "hello-"},

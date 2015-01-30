@@ -395,7 +395,6 @@ func lexNewLine(l *lexer) stateFn {
 
 	l.width = len("\n")
 	l.pos += l.width
-
 	l.emit(itemNewLine) //TODO: reintroduce if needed
 	l.incrementBreaksSinceList()
 	return lexText
@@ -409,7 +408,7 @@ func (l *lexer) resetBreaksSinceList() {
 func (l *lexer) incrementBreaksSinceList() {
 	l.breakCount++
 	if l.breakCount >= 2 {
-		l.resetListDepth()
+		//l.resetListDepth()  //TODO: is this needed?
 	}
 }
 func lexFreeLink(l *lexer) stateFn {
@@ -551,18 +550,15 @@ func lexAsterisk(l *lexer) stateFn {
 	//  then we are starting a new (maybe embedded list)
 	if isSpace(l.peek()) && l.isPrecededByWhitespace(l.pos-asteriskCount) {
 		if l.listDepth+1 == asteriskCount {
-			fmt.Println("INCREASING")
 			//this is a new list start
 			l.emit(itemListUnorderedIncrease)
 			l.emit(itemListUnordered)
 			l.listDepth++
 			l.breakCount = 0
 		} else if l.listDepth == asteriskCount {
-			fmt.Println("SAME")
 			l.emit(itemListUnorderedSameAsLast)
 			l.breakCount = 0
 		} else if l.listDepth != 0 && l.listDepth >= asteriskCount {
-			fmt.Println("DECREASE")
 			l.listDepth--
 			l.emit(itemListUnorderedDecrease)
 			l.breakCount = 0
@@ -747,6 +743,7 @@ func (l *lexer) emitManual(t itemType, startPos int, input string) {
 
 }
 func (l *lexer) emit(t itemType) {
+	//	fmt.Println("emitting", t, l.start, l.pos)
 	l.items <- item{t, l.start, l.input[l.start:l.pos]}
 	l.start = l.pos
 	l.lastLastType = l.lastType
