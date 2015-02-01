@@ -45,6 +45,7 @@ var itemTokens = map[itemType][]string{
 	itemWikiLineBreak: []string{"</br>", ""},
 }
 
+//parser keeps track of input processing
 type parser struct {
 	name           string
 	input          string
@@ -57,6 +58,7 @@ type parser struct {
 	depth          int
 }
 
+//isOpen checks if this item is in the openList
 func (p *parser) isOpen(typ itemType) bool {
 	if val, ok := p.openList[typ]; ok {
 		return val > 0
@@ -65,6 +67,7 @@ func (p *parser) isOpen(typ itemType) bool {
 	}
 }
 
+//wasPreClosed checks if something is in the preClosedList indicating it was closed early for some reason.
 func (p *parser) wasPreClosed(typ itemType) bool {
 	if val, ok := p.preClosedList[typ]; ok {
 		return val > 0
@@ -80,6 +83,7 @@ func (p *parser) wasPreClosed(typ itemType) bool {
 //	 -> isOpen(italics). yes. close all. closing first pop. strong. add to preclose.  closing second pop. italics.
 //	 -> isOpen(strong) no. but should not write open tag either.
 
+//closeOthers returns all closing tags up to the intended close target itemType
 func (p *parser) closeOthers(typ itemType) string {
 	var buffer bytes.Buffer
 	//var found = false
@@ -110,6 +114,7 @@ func (p *parser) closeOthers(typ itemType) string {
 	return buffer.String()
 }
 
+// closeSpecific will only close the target itemType and will only search back according to limit
 func (p *parser) closeSpecific(typ itemType, limit int) string {
 	var buffer bytes.Buffer
 	var limitCount = 0
@@ -141,6 +146,7 @@ func (p *parser) closeSpecific(typ itemType, limit int) string {
 	return buffer.String()
 }
 
+//cantCrossLines is a map of items that should not cross (i.e. remain open) over line endings without being closed first
 var cantCrossLines = map[itemType]bool{
 	itemHeading1:      true,
 	itemHeading2:      true,
@@ -154,6 +160,7 @@ var cantCrossLines = map[itemType]bool{
 
 // In many cases, everything can cross lines, and really doesn't matter.
 // what do we do with things that are allowed to cross lines... but have been popped. need to add back?
+//closeAtLineEnd will close any item that is currently open and in the cantCrossLines list
 func (p *parser) closeAtLineEnd() string {
 	var buffer bytes.Buffer
 	var addMeBack = make(map[itemType]int)
@@ -186,6 +193,7 @@ func (p *parser) closeAtLineEnd() string {
 	return buffer.String()
 }
 
+//closeAtDoubleLineBreak will close everything that is open
 func (p *parser) closeAtDoubleLineBreak() string {
 	var buffer bytes.Buffer
 	var addMeBack = make(map[itemType]int)
@@ -222,8 +230,7 @@ func (p *parser) collect(input string) (items []item) {
 	return items
 }
 
-//maintain an open list.  send writeCloses()
-
+//Transform processes an input string of creole markdown and returns html or error
 func (p *parser) Transform(input string) (output string, terror error) {
 	p.openList = make(map[itemType]int)
 	p.preClosedList = make(map[itemType]int)
@@ -232,7 +239,7 @@ func (p *parser) Transform(input string) (output string, terror error) {
 	p.lex = lex("creole", input)
 	p.items = p.items[:0]
 	p.openItemsStack = new(openItems)
-
+	//TODO: refactor this long switch
 Done:
 	for {
 		item := p.lex.nextItem()
@@ -462,7 +469,7 @@ Done:
 	return buffer.String(), nil
 }
 
-//given this {{src|alt}}
+//translateWikiImageToHtml will given this {{src|alt}}
 //returns this <img src="src" alt="alt" />
 func (p *parser) translateWikiImageToHtml(wikiImage string) string {
 	wikiImage = strings.TrimPrefix(wikiImage, "{{")
@@ -475,7 +482,7 @@ func (p *parser) translateWikiImageToHtml(wikiImage string) string {
 	return "<img src=\"" + imageParts[0] + "\" alt=\"" + alt + "\" />"
 }
 
-//given this [[href|text]]
+//translateWikiLinkToHtml will given this [[href|text]]
 //returns this <a href="href"/>text</a>
 func (p *parser) translateWikiLinkToHtml(wikiLink string) string {
 	wikiLink = strings.TrimPrefix(wikiLink, "[[")
@@ -488,10 +495,13 @@ func (p *parser) translateWikiLinkToHtml(wikiLink string) string {
 	return p.makeHtmlLink(linkParts[0], text)
 }
 
+//makeHtmlLink fabricates an simple html link
 func (p *parser) makeHtmlLink(href string, text string) string {
 
 	return "<a href=\"" + href + "\" />" + text + "</a>"
 }
+
+//isParagraphStart checks if the current item is at the start of a paragraph
 func (p *parser) isParagraphStart(current item) bool {
 
 	if current.typ == itemText {
@@ -518,6 +528,8 @@ func (p *parser) isParagraphStart(current item) bool {
 	return false
 }
 
+//nextNonSpace scans forward until the nextNonSpace
+// TODO: remove?
 func (p *parser) nextNonSpace(current item, currentBreakCount int) (token item, breakCount int) {
 	for {
 		current = p.lex.nextItem()
@@ -531,11 +543,7 @@ func (p *parser) nextNonSpace(current item, currentBreakCount int) (token item, 
 	return current, currentBreakCount
 }
 
-func (p *parser) processItem(item item) (string, error) {
-
-	return "", nil
-}
-
+//openItems represents a stack LIFO for holding the currently open items
 type openItems struct {
 	top  *openItem
 	size int
