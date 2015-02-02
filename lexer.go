@@ -14,6 +14,7 @@ const eof = -1
 
 type stateFn func(*lexer) stateFn
 
+//lexer holds the state of the lexical scanning process
 type lexer struct {
 	name         string
 	input        string
@@ -31,12 +32,14 @@ type lexer struct {
 	//consider storing a last "block" hit. different than last emit type, more course grained
 }
 
+//item is the lexeme or token identified by the scanner
 type item struct {
 	typ itemType // The type of this item.
 	pos int      // The starting position, in bytes, of this item in the input string.
 	val string   // The value of this item.
 }
 
+//String function to make it easier and more readable to print out items
 func (i item) String() string {
 	switch {
 	case i.typ == itemEOF:
@@ -104,6 +107,7 @@ const (
 	itemWikiLineBreak
 )
 
+//lex constructs a new lexer for the supplied input
 func lex(name, input string) *lexer {
 	l := &lexer{
 		name:  name,
@@ -114,6 +118,8 @@ func lex(name, input string) *lexer {
 	return l
 
 }
+
+// nextItem returns the next item (token) from the input
 func (l *lexer) nextItem() item {
 	for {
 		select {
@@ -143,6 +149,7 @@ const (
 	horizontalRuleToken  = "----"
 )
 
+// lexText is the main control function, delegates to underlying lex stateFns depending on current pos of input
 func lexText(l *lexer) stateFn {
 	for {
 		if strings.HasPrefix(l.input[l.pos:], "//") {
@@ -208,6 +215,7 @@ func lexText(l *lexer) stateFn {
 	return nil
 }
 
+//next gets the next rune in the input
 func (l *lexer) next() rune {
 	if int(l.pos) >= len(l.input) {
 		l.width = 0

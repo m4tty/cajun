@@ -231,7 +231,8 @@ func (p *parser) collect(input string) (items []item) {
 }
 
 //Transform processes an input string of creole markdown and returns html or error
-func (p *parser) Transform(input string) (output string, terror error) {
+func Transform(input string) (output string, terror error) {
+	p := parser{}
 	p.openList = make(map[itemType]int)
 	p.preClosedList = make(map[itemType]int)
 	p.input = input

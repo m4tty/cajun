@@ -61,9 +61,8 @@ var parserTests = []parserTest{
 }
 
 func TestParser(t *testing.T) {
-	p := parser{}
 	for _, test := range parserTests {
-		output, _ := p.Transform(test.input)
+		output, _ := Transform(test.input)
 		if test.output != output {
 			t.Errorf("%s: got\n\t%+v\nexpected\n\t%v", test.name, output, test.output)
 		}
