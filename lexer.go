@@ -1,3 +1,4 @@
+//Package cajun provide creole processing (lexing and parsing) functionality
 package cajun
 
 import (
@@ -9,9 +10,7 @@ import (
 
 type itemType int
 
-const leftMeta = "**"
 const eof = -1
-const itemLeftDelim = 6
 
 type stateFn func(*lexer) stateFn
 

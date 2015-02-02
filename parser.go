@@ -6,6 +6,7 @@ import (
 	"strings"
 )
 
+// itemTokens is a map containing the start and ending html tags required to process creole
 var itemTokens = map[itemType][]string{
 	itemBold:                    []string{"<strong>", "</strong>"},
 	itemEOF:                     []string{"</br>", ""},
