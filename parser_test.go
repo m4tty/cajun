@@ -1,10 +1,6 @@
 package cajun
 
-import (
-	"fmt"
-	"io/ioutil"
-	"testing"
-)
+import "testing"
 
 type parserTest struct {
 	name   string
@@ -75,10 +71,10 @@ func TestParser(t *testing.T) {
 	}
 }
 
-func TestParserLarge(t *testing.T) {
-	p := parser{}
-	dat, _ := ioutil.ReadFile("./creole1.0test.txt")
-	//	fmt.Print(string(dat))
-	output, _ := p.Transform(string(dat))
-	fmt.Print("-------------\n", output)
-}
+//func TestParserLarge(t *testing.T) {
+//	p := parser{}
+//	dat, _ := ioutil.ReadFile("./creole1.0test.txt")
+//	//	fmt.Print(string(dat))
+//	output, _ := p.Transform(string(dat))
+//	fmt.Print("-------------\n", output)
+//}
