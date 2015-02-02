@@ -49,7 +49,6 @@ var itemTokens = map[itemType][]string{
 type parser struct {
 	name           string
 	input          string
-	boldOpen       bool
 	openList       map[itemType]int //maybe an int instead of bool, to count the open items ++/--
 	preClosedList  map[itemType]int //maybe an int instead of bool, to count the open items ++/--
 	openItemsStack *openItems
