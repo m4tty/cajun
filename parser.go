@@ -244,13 +244,14 @@ Done:
 	for {
 		item := p.lex.nextItem()
 		p.items = append(p.items, item)
+
+		if p.isFollowingDoubleLineBreak(item) {
+			buffer.WriteString(p.closeAtDoubleLineBreak())
+		}
 		switch item.typ {
 
 		case itemText:
 			if p.isParagraphStart(item) {
-
-				//close stuff, if needed.
-				buffer.WriteString(p.closeAtDoubleLineBreak())
 
 				buffer.WriteString("<p>")
 				p.openItemsStack.Push(itemText)
@@ -349,26 +350,15 @@ Done:
 				}
 			}
 			if item.typ == itemListUnorderedDecrease {
-				//</li>
-				//buffer.WriteString(p.closeSpecific(itemListUnorderedDecrease, (p.depth - listLength)))
 				closing := p.closeOthers(itemListUnorderedIncrease)
-				//buffer.WriteString(p.closeOthers(itemListUnordered))
-				//buffer.WriteString(p.closeOthers(itemListUnorderedSameAsLast))
 				buffer.WriteString(closing)
 				//this is hacky
 
 				closingUnordered := p.closeSpecific(itemListUnordered, 1)
 				buffer.WriteString(closingUnordered)
-				//buffer.WriteString(p.closeSpecific(itemListUnorderedIncrease, (p.depth - listLength)))
-				//buffer.WriteString(p.closeSpecific(itemListUnorderedSameAsLast, (p.depth - listLength)))
-				//buffer.WriteString(p.closeSpecific(itemListUnorderedDecrease, (p.depth - listLength)))
 			}
 			if item.typ == itemListUnorderedIncrease {
-
-				//buffer.WriteString(p.closeOthers(itemListUnordered))
-				//buffer.WriteString(p.closeSpecific(itemListUnorderedSameAsLast, (p.depth - listLength)))
 			}
-			//if p.isOpen(item.typ) == false {
 			if val, ok := itemTokens[item.typ]; ok {
 				buffer.WriteString(val[0])
 				p.openItemsStack.Push(item.typ)
@@ -376,9 +366,6 @@ Done:
 			} else {
 				fmt.Errorf("Can not find item token")
 			}
-			//} else {
-			//		buffer.WriteString(p.closeOthers(item.typ))
-			//	}
 
 			p.depth = listLength //set to current depth
 			break
@@ -422,6 +409,46 @@ Done:
 			}
 			p.depth = listLength //set to current depth
 			break
+		case itemTableRowStart, itemTableRowEnd, itemTableHeaderItem, itemTableItem:
+			if item.typ == itemTableRowStart {
+				if !p.isOpen(itemTable) {
+					buffer.WriteString(itemTokens[itemTable][0])
+					p.openItemsStack.Push(itemTable)
+					p.openList[itemTable]++
+				}
+				buffer.WriteString(itemTokens[itemTableRow][0])
+				p.openList[itemTableRow]++
+			}
+			//explicit row end
+			if item.typ == itemTableRowEnd {
+				if p.isOpen(itemTableItem) {
+					buffer.WriteString(itemTokens[itemTableItem][1])
+					p.openList[itemTableItem]--
+				}
+				if p.isOpen(itemTableHeaderItem) {
+					buffer.WriteString(itemTokens[itemTableHeaderItem][1])
+					p.openList[itemTableHeaderItem]--
+				}
+
+				buffer.WriteString(itemTokens[itemTableRow][1])
+
+				p.openList[itemTableRow]--
+			}
+			if item.typ == itemTableHeaderItem || item.typ == itemTableItem {
+				if val, ok := itemTokens[item.typ]; ok {
+					if p.isOpen(item.typ) {
+						buffer.WriteString(val[1])
+
+						p.openList[item.typ]--
+
+					}
+					buffer.WriteString(val[0])
+					p.openList[item.typ]++
+				} else {
+					fmt.Errorf("Can not find item token")
+				}
+			}
+			break
 		case itemImage:
 			imageHtml := p.translateWikiImageToHtml(item.val)
 			buffer.WriteString(imageHtml)
@@ -440,17 +467,16 @@ Done:
 		case itemWikiLineBreak:
 			buffer.WriteString("<br />")
 			break
+
+		case itemNoWikiOpen:
+			buffer.WriteString("<pre>")
+			//TODO: what to do if nowiki is not closed. do we track hanging nowiki tags?
+			break
+		case itemNoWikiClose:
+			buffer.WriteString("</pre>")
+			break
 		case itemNewLine:
 			//TODO: anything here?
-			//var newLineCount = 1
-			//item, newLineCount = p.nextNonSpace(item, newLineCount)
-			//if newLineCount > 1 {
-			//		buffer.WriteString(p.closeAtDoubleLineBreak())
-			//	} else {
-			// only close the <li>
-			//buffer.WriteString(p.closeOthers(itemListUnordered))
-			//	}
-			//goto ProcessNext
 			break
 		case itemEOF:
 			buffer.WriteString(p.closeAtDoubleLineBreak())
@@ -461,10 +487,6 @@ Done:
 			buffer.WriteString(item.val)
 			break
 		}
-		//		if p.lex.state == nil {
-		//			fmt.Println("state is nil")
-		//			break
-		//		}
 	}
 	return buffer.String(), nil
 }
@@ -499,6 +521,29 @@ func (p *parser) translateWikiLinkToHtml(wikiLink string) string {
 func (p *parser) makeHtmlLink(href string, text string) string {
 
 	return "<a href=\"" + href + "\" />" + text + "</a>"
+}
+
+func (p *parser) isFollowingDoubleLineBreak(current item) bool {
+	if len(p.items) == 1 {
+		//at the start of the input.
+		return true
+	}
+	newLineCount := 0
+	for i := len(p.items) - 2; i >= 0; i-- {
+		precedingItem := p.items[i]
+
+		if precedingItem.typ == itemNewLine {
+			newLineCount++
+			if newLineCount > 1 {
+				return true
+			}
+			continue
+		}
+		if precedingItem.typ != itemSpaceRun {
+			break
+		}
+	}
+	return false
 }
 
 //isParagraphStart checks if the current item is at the start of a paragraph
