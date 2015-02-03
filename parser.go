@@ -146,53 +146,6 @@ func (p *parser) closeSpecific(typ itemType, limit int) string {
 	return buffer.String()
 }
 
-//cantCrossLines is a map of items that should not cross (i.e. remain open) over line endings without being closed first
-var cantCrossLines = map[itemType]bool{
-	itemHeading1:      true,
-	itemHeading2:      true,
-	itemHeading3:      true,
-	itemHeading4:      true,
-	itemHeading5:      true,
-	itemHeading6:      true,
-	itemListUnordered: true,
-	itemListOrdered:   true,
-}
-
-// In many cases, everything can cross lines, and really doesn't matter.
-// what do we do with things that are allowed to cross lines... but have been popped. need to add back?
-//closeAtLineEnd will close any item that is currently open and in the cantCrossLines list
-func (p *parser) closeAtLineEnd() string {
-	var buffer bytes.Buffer
-	var addMeBack = make(map[itemType]int)
-
-	for p.openItemsStack.Len() > 0 {
-		t := p.openItemsStack.Pop()
-
-		if _, cantCross := cantCrossLines[t]; cantCross {
-			if val, ok := itemTokens[t]; ok {
-				buffer.WriteString(val[1])
-				p.openList[t]--
-				//		if t == typ {
-				//			break
-				//		} else {
-				//			// closed early
-				//			//				p.preClosedList[t]++ //Is this closed "early"?
-				//		}
-			}
-		} else {
-			addMeBack[t]++ //might we hit multiple of the same type, that are going to cross lines?
-		}
-
-	}
-	for k, _ := range addMeBack {
-		//a map isn't ordered, this could cause trouble.
-		p.openItemsStack.Push(k) //deal with multiple of same type? if yes, need to change away from map, as we'll need to maintain order
-
-	}
-
-	return buffer.String()
-}
-
 //closeAtDoubleLineBreak will close everything that is open
 func (p *parser) closeAtDoubleLineBreak() string {
 	var buffer bytes.Buffer

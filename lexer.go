@@ -58,6 +58,7 @@ const (
 	itemAsterisks
 	itemBold // bold constant
 	itemEOF
+	itemEscape
 	itemFreeLink
 	itemHeading1
 	itemHeading2
@@ -152,6 +153,10 @@ const (
 // lexText is the main control function, delegates to underlying lex stateFns depending on current pos of input
 func lexText(l *lexer) stateFn {
 	for {
+		if strings.HasPrefix(l.input[l.pos:], "~") {
+			l.emitAnyPreviousText()
+			return lexEscape
+		}
 		if strings.HasPrefix(l.input[l.pos:], "//") {
 			l.emitAnyPreviousText()
 			return lexItalics
@@ -387,13 +392,15 @@ func lexHorizontalRule(l *lexer) stateFn {
 	}
 	return lexText
 }
+func lexEscape(l *lexer) stateFn {
+	l.pos += len("~") + 1
+	//TODO: if followed by a link, we need to escape the entire link, which would happpen just by jumping one char forward
+	l.emit(itemEscape)
+	return lexText
+}
 func lexItalics(l *lexer) stateFn {
 	l.pos += len("//")
-	//	if strings.HasPrefix(l.input[l.pos:], leftComment) {
-	//		return lexComment
-	//	}
-	l.emit(itemItalics) //TODO: reintroduce if needed
-	//l.parenDepth = 0
+	l.emit(itemItalics)
 	return lexText
 }
 
