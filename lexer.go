@@ -237,6 +237,7 @@ func (l *lexer) errorf(format string, args ...interface{}) stateFn {
 	return nil
 }
 
+//lexImage scans until the closing delimiter. emits an item image containing the entire image token e.g. {{blah|blah}}
 func lexImage(l *lexer) stateFn {
 
 	closed := isExplicitClose(l.input, l.pos, "}}")
@@ -252,6 +253,8 @@ func lexImage(l *lexer) stateFn {
 	}
 	return lexText
 }
+
+//lexNoWikiText emits a noWikiText token of {{{ asdfasdf }}}
 func lexNoWikiText(l *lexer) stateFn {
 
 	length := getTextLength(l.input, l.pos, "}}}")
