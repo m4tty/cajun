@@ -364,6 +364,7 @@ func (l *lexer) isPrecededByWhitespace(startPos int) bool {
 	return whitespaceOnly
 }
 
+//isFollowedByWhiteSpace checks if the currentPos has only whitespace after it up until a new line
 func (l *lexer) isFollowedByWhiteSpace(currentPos int) bool {
 	var justWhiteSpace = false
 	var tempPos = currentPos
@@ -381,6 +382,7 @@ func (l *lexer) isFollowedByWhiteSpace(currentPos int) bool {
 	return justWhiteSpace
 }
 
+//lexHorizontalRule emits a horizontalRule token for all ----
 func lexHorizontalRule(l *lexer) stateFn {
 	tempPos := l.pos + len(horizontalRuleToken)
 	var followedByWhiteSpace = false
@@ -395,12 +397,16 @@ func lexHorizontalRule(l *lexer) stateFn {
 	}
 	return lexText
 }
+
+//lexEscape emits a itemEscape token when a ~ tilda is encountered. it also emits one the next "escaped" rune
 func lexEscape(l *lexer) stateFn {
 	l.pos += len("~") + 1
 	//TODO: if followed by a link, we need to escape the entire link, which would happpen just by jumping one char forward
 	l.emit(itemEscape)
 	return lexText
 }
+
+//lexItalics emits an italics token of double slash.. it is up to the client to handle open/close and itacized text
 func lexItalics(l *lexer) stateFn {
 	l.pos += len("//")
 	l.emit(itemItalics)
@@ -558,15 +564,8 @@ func lexHeading(l *lexer) stateFn {
 	return lexText
 }
 
-func getHeadingLength(input string, currentPos int) int {
-	i := strings.Index(input[currentPos:], "\n")
-	if i >= 0 {
-		return i
-	} else {
-		return len(input)
-	}
-}
-
+//getTextLength returns the length of input until a closing char is encountered or the entire input.
+// TODO: This can probably be removed in favor of using a simle strings.Index
 func getTextLength(input string, currentPos int, closeChars string) int {
 	i := strings.Index(input[currentPos:], closeChars)
 	if i >= 0 {
