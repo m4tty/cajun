@@ -26,6 +26,7 @@ var parserTests = []parserTest{
 	{"hr followed by space", "----  ", "<hr>  "},
 	{"hr too many dashes", "-----", "<p>-----</p>"},
 	{"text", `now is the time`, "<p>now is the time</p>"},
+	{"text with bold", "hello-~**blah**-world", "<p>hello-**blah<strong>-world</strong></p>"},
 	{"text with bold", "hello-**blah**-world", "<p>hello-<strong>blah</strong>-world</p>"},
 	{"text with italics", "hello-//blah//-world", "<p>hello-<em>blah</em>-world</p>"},
 	{"text with bad order", "hello-**//blah**//-world", "<p>hello-<strong><em>blah</em></strong>-world</p>"},
