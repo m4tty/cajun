@@ -59,6 +59,7 @@ const (
 	itemBold // bold constant
 	itemEOF
 	itemEscape
+	itemEscapeText
 	itemFreeLink
 	itemHeading1
 	itemHeading2
@@ -398,12 +399,18 @@ func lexHorizontalRule(l *lexer) stateFn {
 	return lexText
 }
 
+func lexEscapeText(l *lexer) stateFn {
+	l.pos += 1
+	//TODO: if followed by a link, we need to escape the entire link, which would happpen just by jumping one char forward
+	l.emit(itemEscapeText)
+	return lexText
+}
+
 //lexEscape emits a itemEscape token when a ~ tilda is encountered. it also emits one the next "escaped" rune
 func lexEscape(l *lexer) stateFn {
-	l.pos += len("~") + 1
-	//TODO: if followed by a link, we need to escape the entire link, which would happpen just by jumping one char forward
+	l.pos += len("~")
 	l.emit(itemEscape)
-	return lexText
+	return lexEscapeText
 }
 
 //lexItalics emits an italics token of double slash.. it is up to the client to handle open/close and itacized text
