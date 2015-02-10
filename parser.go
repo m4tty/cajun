@@ -429,6 +429,12 @@ Done:
 		case itemNoWikiClose:
 			buffer.WriteString("</pre>")
 			break
+		case itemEscape:
+			//don't do anything with the itemEscape, we just want to make sure we don't write it (~) out
+			break
+		case itemEscapeText:
+			buffer.WriteString(item.val)
+			break
 		case itemNewLine:
 			//TODO: anything here?
 			break
