@@ -58,6 +58,7 @@ var lexTests = []lexTest{
 	{"new lines", "\n\n\n\n", []item{tNewLine, tNewLine, tNewLine, tNewLine, tEOF}},
 	{"text", `now is the time`, []item{{itemText, 0, "now is the time"}, tEOF}},
 	{"escaped bold", `~**now is the time`, []item{{itemEscape, 0, "~"}, {itemEscapeText, 0, "*"}, {itemText, 0, "*now is the time"}, tEOF}},
+	{"escaped bold", `~~now is the time`, []item{{itemEscape, 0, "~"}, {itemEscapeText, 0, "~"}, {itemText, 0, "now is the time"}, tEOF}},
 	{"text with link", "hello-[[blah]]-world", []item{
 		{itemText, 0, "hello-"},
 		{itemLink, 0, "[[blah]]"},
