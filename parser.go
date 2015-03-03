@@ -483,6 +483,7 @@ func (p *parser) makeHtmlLink(href string, text string) string {
 	return "<a href=\"" + href + "\" />" + text + "</a>"
 }
 
+//isFollowingDoubleLineBreak checks if the current item follows a double line break
 func (p *parser) isFollowingDoubleLineBreak(current item) bool {
 	if len(p.items) == 1 {
 		//at the start of the input.
