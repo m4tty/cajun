@@ -510,7 +510,7 @@ func (p *parser) translateWikiLinkToHtml(wikiLink string) string {
 	if len(linkParts) == 2 {
 		text = linkParts[1]
 	}
-	if p.cajun.WikiLink != nil {
+	if p.cajun != nil && p.cajun.WikiLink != nil {
 		return p.cajun.WikiLink.WikiLink(linkParts[0], text)
 	}
 	return p.makeHtmlLink(linkParts[0], text)
@@ -518,7 +518,7 @@ func (p *parser) translateWikiLinkToHtml(wikiLink string) string {
 
 //makeHtmlLink fabricates an simple html link
 func (p *parser) makeHtmlLink(href string, text string) string {
-	if p.cajun.FreeLink != nil {
+	if p.cajun != nil && p.cajun.FreeLink != nil {
 		return p.cajun.FreeLink.FreeLink(href, text)
 	}
 	return "<a href=\"" + href + "\" />" + text + "</a>"
