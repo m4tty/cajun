@@ -46,6 +46,24 @@ var itemTokens = map[itemType][]string{
 	itemWikiLineBreak: []string{"</br>", ""},
 }
 
+type FreeLinkFormatter interface {
+	FreeLink(href string, text string) string
+}
+
+type WikiLinkFormatter interface {
+	WikiLink(href string, text string) string
+}
+
+//Cajun is for parser options
+type Cajun struct {
+	FreeLink FreeLinkFormatter
+	WikiLink WikiLinkFormatter
+}
+
+func New() *Cajun {
+	return &Cajun{}
+}
+
 //parser keeps track of input processing
 type parser struct {
 	name           string
@@ -56,6 +74,7 @@ type parser struct {
 	items          []item
 	lex            *lexer
 	depth          int
+	cajun          *Cajun
 }
 
 //isOpen checks if this item is in the openList
@@ -183,17 +202,34 @@ func (p *parser) collect(input string) (items []item) {
 	return items
 }
 
+func (c *Cajun) Transform(input string) (output string, terror error) {
+	p := parser{}
+	p.cajun = c
+	p.openList = make(map[itemType]int)
+	p.preClosedList = make(map[itemType]int)
+	p.input = input
+	p.lex = lex("creole", input)
+	p.items = p.items[:0]
+	p.openItemsStack = new(openItems)
+	//TODO: refactor this long switch
+	return p.transform()
+}
+
 //Transform processes an input string of creole markdown and returns html or error
 func Transform(input string) (output string, terror error) {
 	p := parser{}
 	p.openList = make(map[itemType]int)
 	p.preClosedList = make(map[itemType]int)
 	p.input = input
-	var buffer bytes.Buffer
 	p.lex = lex("creole", input)
 	p.items = p.items[:0]
 	p.openItemsStack = new(openItems)
 	//TODO: refactor this long switch
+	return p.transform()
+}
+
+func (p parser) transform() (output string, terror error) {
+	var buffer bytes.Buffer
 Done:
 	for {
 		item := p.lex.nextItem()
@@ -474,12 +510,17 @@ func (p *parser) translateWikiLinkToHtml(wikiLink string) string {
 	if len(linkParts) == 2 {
 		text = linkParts[1]
 	}
+	if p.cajun != nil && p.cajun.WikiLink != nil {
+		return p.cajun.WikiLink.WikiLink(linkParts[0], text)
+	}
 	return p.makeHtmlLink(linkParts[0], text)
 }
 
 //makeHtmlLink fabricates an simple html link
 func (p *parser) makeHtmlLink(href string, text string) string {
-
+	if p.cajun != nil && p.cajun.FreeLink != nil {
+		return p.cajun.FreeLink.FreeLink(href, text)
+	}
 	return "<a href=\"" + href + "\" />" + text + "</a>"
 }
 
